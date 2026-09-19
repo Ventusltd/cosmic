@@ -50,7 +50,8 @@
 <div id="crt"></div>
 <div id="hud">starting</div>
 <div id="foot">
-  <b>r</b> collapse to a random point &middot; <b>/</b> collapse to an address &middot;
+  <b>x</b> x-ray: every pixel counts &middot; <b>s</b> scan: show every one &middot; <b>r</b> collapse to a random point &middot;
+  <b>/</b> collapse to an address &middot;
   <b>click</b> to travel in &middot; <b>backspace</b> to pull back &middot; drag to steer &middot;
   scroll to zoom &middot; <b>l</b> names &middot; positions are computed from the ordinal, never
   stored &middot; provided as is, without warranty of any kind; a chart, not a design
@@ -204,7 +205,79 @@ function build(vs, fs) {
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
   return p;
 }
-const PB = build(VS_BODY, FS_BODY), PL = build(VS_LEAF, FS_LEAF);
+// SHOW EVERYTHING. The confusion limit is a limit on one FRAME, not on a display. A screen's
+// capacity is resolution elements multiplied by frames, so completeness was never impossible,
+// only slow. This draws the whole population in order, a screenful at a time, every thing in its
+// own resolution element at the confusion spacing, so nothing shares a pixel with anything and
+// nothing is thinned. Run it to the end and every single one has been shown.
+const VS_SCAN = `#version 300 es
+precision highp float;
+uniform float u_cols;
+uniform vec2  u_step;
+uniform vec2  u_origin;
+void main() {
+  float i = float(gl_VertexID);
+  vec2 p = u_origin + vec2(mod(i, u_cols), floor(i / u_cols)) * u_step;
+  gl_Position = vec4(p, 0.0, 1.0);
+  gl_PointSize = 1.0;
+}`;
+// THE X-RAY. A pixel that can only be lit or unlit wastes its other bits and turns density into
+// a white flash. This counts instead: every thing lands in a float buffer that adds one, so each
+// pixel ends up holding the EXACT number of things at that position, and a second pass turns that
+// count into a shade. The picture is then a measurement and it is invertible: read the shade, get
+// the count back. Nothing is thinned and nothing is dropped, and the whole population can sit in
+// one frame, because the frame is no longer limited to saying yes or no.
+const VS_FULL = `#version 300 es
+precision highp float;
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+const FS_TONE = `#version 300 es
+precision highp float;
+uniform sampler2D u_tex;
+uniform float u_white;     // the count that maps to full white. Stated on screen, so invertible.
+out vec4 o;
+void main() {
+  float n = texelFetch(u_tex, ivec2(gl_FragCoord.xy), 0).r;
+  if (n <= 0.0) { o = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  // logarithmic, because density here spans five orders of magnitude and a linear ramp would show
+  // one bright core and nothing else. The mapping is printed so it can be read backwards.
+  float v = clamp(log(1.0 + n) / log(1.0 + u_white), 0.06, 1.0);
+  o = vec4(vec3(0.87, 0.89, 0.86) * v, 1.0);
+}`;
+const PB = build(VS_BODY, FS_BODY), PL = build(VS_LEAF, FS_LEAF),
+      PT = build(VS_FULL, FS_TONE),
+      PS = build(VS_SCAN, FS_LEAF);
+const tTex = gl.getUniformLocation(PT, 'u_tex'), tWhite = gl.getUniformLocation(PT, 'u_white');
+
+// counting past 255 needs a float target. Without it the x-ray refuses rather than counting wrong.
+const FLOATOK = !!gl.getExtension('EXT_color_buffer_float');
+let acc = null, accFB = null, xray = false;
+function makeAccumulator() {
+  if (!FLOATOK) return;
+  if (acc) { gl.deleteTexture(acc); gl.deleteFramebuffer(accFB); }
+  acc = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, acc);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, cv.width, cv.height, 0, gl.RED, gl.FLOAT, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  accFB = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, accFB);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, acc, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+// the count that maps to full white. The mean density over the drawn area, lifted so the crowded
+// parts do not all clip to one shade. Printed on screen, never hidden.
+function whitePoint() {
+  const R = cv.height / 2 * scale;
+  return Math.max(4, (drawn || TOTAL) / Math.max(1, Math.PI * R * R) * 16);
+}
+const sCols = gl.getUniformLocation(PS, 'u_cols'),
+      sStep = gl.getUniformLocation(PS, 'u_step'),
+      sOrig = gl.getUniformLocation(PS, 'u_origin');
 const uBody = gl.getUniformLocation(PB, 'u_body[0]');
 const U = n => gl.getUniformLocation(PL, n);
 const lC=U('u_c'), lRho=U('u_rho'), lInv=U('u_invn'), lStr=U('u_stride'), lPas=U('u_pass'),
@@ -228,7 +301,15 @@ cv.addEventListener('webglcontextlost', e => {
 // ------------------------------------------------------------------------ the exposure's state
 const PER_CALL = 600000;   // nine million points in one call trips the driver watchdog
 let pass = 0, maxStride = 1, started = 0, fence = null, fenceAt = 0, perFrame = 1, retired = 0;
-function restart() { pass = 0; retired = 0; if (fence) { gl.deleteSync(fence); fence = null; } }
+function restart() {
+  pass = 0; retired = 0;
+  if (fence) { gl.deleteSync(fence); fence = null; }
+  if (xray && accFB) {                          // a new camera means a new count
+    gl.bindFramebuffer(gl.FRAMEBUFFER, accFB);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+}
 
 // ----------------------------------------------------------------------------- the placement
 // ONE LAW PER LEVEL, CHOSEN BY THE CARTRIDGE. Children are laid inside their parent's disc and
@@ -454,6 +535,7 @@ function resize() {
   cv.width = ov.width = Math.floor(innerWidth);
   cv.height = ov.height = Math.floor(innerHeight);
   gl.viewport(0, 0, cv.width, cv.height);
+  makeAccumulator();
   restart();
 }
 addEventListener('resize', resize); resize();
@@ -500,6 +582,15 @@ function walk(node, depth) {
   }
   if (radp < 0.4) { held += node.value; heldN++; return; }              // below the grain
 
+  // IN X-RAY NOTHING IS HELD BACK. The resolution rule exists because one bit per pixel cannot
+  // carry a crowd. Counting can, so every visible thing is drawn and the shade states how many
+  // landed in each pixel.
+  if (xray) {
+    resolved.push(node); drawn += node.value;
+    node.stride = Math.max(1, Math.ceil(node.value / PER_CALL));
+    maxStride = Math.max(maxStride, node.stride);
+    return;
+  }
   const capacity = Math.PI * rpx * rpx * PER_PIXEL;
 
   // THE MEASURED HIERARCHY WINS. Checking "does it fit" before "does it have children" is how a
@@ -558,8 +649,47 @@ function classify() {
 }
 
 // ------------------------------------------------------------------------------- the exposure
+// one thing per confusion cell: sqrt(1/PER_PIXEL) pixels apart in each direction
+const SCAN_PX = Math.sqrt(1 / PER_PIXEL);
+let scanning = false, scanK = 0, scanT0 = 0, scanFrames = 0;
+
+function scanFrame() {
+  const cols = Math.max(1, Math.floor(cv.width / SCAN_PX));
+  const rows = Math.max(1, Math.floor(cv.height / SCAN_PX));
+  const cells = cols * rows;
+  const n = Math.min(cells, TOTAL - scanK);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  if (n > 0) {
+    gl.useProgram(PS);
+    gl.uniform1f(sCols, cols);
+    gl.uniform2f(sStep, SCAN_PX * 2 / cv.width, SCAN_PX * 2 / cv.height);
+    gl.uniform2f(sOrig, -1 + SCAN_PX / cv.width, -1 + SCAN_PX / cv.height);
+    gl.drawArrays(gl.POINTS, 0, n);
+    scanK += n;
+    scanFrames++;
+  }
+  const secs = (performance.now() - scanT0) / 1000;
+  const rate = scanK / Math.max(0.001, secs);
+  const left = (TOTAL - scanK) / Math.max(1, rate);
+  const where = root && root.children ? findByOrdinal(root.children, Math.min(scanK, TOTAL - 1)) : null;
+  const dur = t => t > 3600 ? (t/3600).toFixed(1) + ' hours'
+             : t > 60 ? (t/60).toFixed(1) + ' minutes' : t.toFixed(0) + ' s';
+  hud.textContent = [
+    'SCAN · every ' + M.unit.replace(/s$/, '') + ' in its own resolution element',
+    (scanK >= TOTAL
+      ? 'ALL ' + fmt(TOTAL) + ' SHOWN · COMPLETE in ' + dur(secs)
+      : 'shown ' + fmt(scanK) + ' of ' + fmt(TOTAL)
+        + ' · ' + (scanK / TOTAL * 100).toFixed(3) + '%'),
+    fmt(cells) + ' per frame at ' + SCAN_PX.toFixed(1) + ' px spacing · nothing shares a pixel',
+    scanK >= TOTAL ? '' : words(rate) + ' per second · ' + dur(left) + ' remaining',
+    where ? 'now in ' + where.label : ''
+  ].filter(Boolean).join(String.fromCharCode(10));
+  requestAnimationFrame(frame);
+}
+
 function frame() {
   if (lost) return;
+  if (scanning && root) { scanFrame(); return; }
   stepTween();
   if (!root) { requestAnimationFrame(frame); return; }
 
@@ -578,6 +708,10 @@ function frame() {
 
   classify();
 
+  if (xray) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, accFB);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);   // every thing adds one to its pixel
+  }
   if (pass === 0) {
     gl.clear(gl.COLOR_BUFFER_BIT);
     started = performance.now();
@@ -622,6 +756,19 @@ function frame() {
     retired = pass = maxStride;
   }
 
+  if (xray) {
+    // the counts are in. Turn them into shades, with the white point stated so the picture can be
+    // read backwards into the number that made it.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.disable(gl.BLEND);
+    gl.useProgram(PT);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, acc);
+    gl.uniform1i(tTex, 0);
+    gl.uniform1f(tWhite, whitePoint());
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
   // ---------------------------------------------------------------- the accounting invariant
   // TRAVELLING MUST NOT LOSE THE WHOLE. Every unit in the cartridge is in exactly one of three
   // states every frame, and the three must sum to the total. This is the check that makes the
@@ -650,6 +797,11 @@ function frame() {
     + ' of ' + fmt(TOTAL) + ' · ' + target.path.length + ' levels, '
     + target.fetches + (target.fetches === 1 ? ' fetch' : ' fetches') + ', no traversal');
   lines.push('distance is time · outward is older · levels are not to scale');
+  if (xray) {
+    lines.push('X-RAY · L20 · each pixel holds its exact count, drawn as a shade');
+    lines.push('black = none · white = ' + fmt(Math.round(whitePoint()))
+      + ' or more in one pixel · logarithmic, so it reads backwards');
+  }
   hud.textContent = lines.join('\n');
   hud.className = (accounted !== TOTAL) ? 'warn' : '';
   overlay();
@@ -832,6 +984,22 @@ gotoIn.addEventListener('keydown', e => {
 });
 addEventListener('keydown', e => {
   if (gotoBox.style.display === 'block') return;
+  // SHOW EVERYTHING. Not a claim, a run: it either reaches the total or it does not.
+  if (e.key === 'x') {
+    if (!FLOATOK) {
+      hud.textContent = 'This GPU has no float colour buffer, so counts past 255 cannot be held. '
+        + 'Refusing to draw an x-ray that would count wrong.';
+      return;
+    }
+    xray = !xray; restart();
+    return;
+  }
+  if (e.key === 's') {
+    scanning = !scanning;
+    if (scanning) { scanK = 0; scanT0 = performance.now(); scanFrames = 0; }
+    else { restart(); }
+    return;
+  }
   if (e.key === '/') { e.preventDefault(); openGoto(); }
   // RANDOM NAVIGATION. A uniformly chosen point out of the whole, landed on directly. This is the
   // test of the claim: if any of 37.93 billion can be reached for one fetch, the distance between
