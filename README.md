@@ -225,12 +225,4 @@ No warranty is given. A chart, not a design.
 
 ## Licence
 
-Code under Apache-2.0. Documentation and generated data under CC BY 4.0.
-
-<!-- DRIFT:START -->
-### Host entanglement, 2026-09-19T10:50:01.953Z
-
-**NOT EVALUATED.** no observation from gitlab
-
-Run `20260919T105001Z`, digest `587160786b14bea764624d9a46d03be550de74c355dcac8f8b19abf1c2eddfba`. LAWS.md L10.
-<!-- DRIFT:END -->
+Open to all. The code is under the Apache License 2.0 (see LICENSE). Original text, tables and ledgers produced by this repository are under CC BY 4.0: use them, and say where they came from. Material belonging to others keeps its own licence, named beside it; standards are cited by clause and value and never reproduced.
