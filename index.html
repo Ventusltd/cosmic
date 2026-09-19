@@ -71,9 +71,17 @@ uniform float u_n;        // the whole population
 uniform float u_scale;    // zoom
 uniform vec2  u_pan;
 uniform float u_aspect;
+uniform float u_stride;   // the interleave: pass p draws every STRIDE-th particle
+uniform float u_pass;
 out float v_r;
 void main() {
-  float k = float(gl_VertexID);
+  // INTERLEAVED, NOT CONTIGUOUS. Radius is monotonic in the ordinal, so drawing k in order
+  // fills outward from the centre and an unfinished exposure looks like a small disc rather
+  // than a faint universe. Pass p draws k = i*STRIDE + p, so every pass spreads across the
+  // whole population. After STRIDE passes every ordinal has been drawn exactly once: the
+  // exposure converges on the complete set and skips nothing.
+  float k = float(gl_VertexID) * u_stride + u_pass;
+  if (k >= u_n) { gl_Position = vec4(2.0, 2.0, 0.0, 1.0); return; }
   // the estate's placement law, unchanged: r from the ordinal, theta by the golden angle.
   // sqrt gives uniform areal density, so the disc fills evenly rather than crowding the centre.
   float r = sqrt((k + 0.5) / u_n);
@@ -114,6 +122,8 @@ const uN = gl.getUniformLocation(prog, 'u_n');
 const uS = gl.getUniformLocation(prog, 'u_scale');
 const uP = gl.getUniformLocation(prog, 'u_pan');
 const uA = gl.getUniformLocation(prog, 'u_aspect');
+const uST = gl.getUniformLocation(prog, 'u_stride');
+const uPA = gl.getUniformLocation(prog, 'u_pass');
 
 // No blending. Alpha accumulation would manufacture brightness that no line possesses;
 // coverage alone shows density, exactly as a monochrome display had to.
@@ -123,12 +133,12 @@ let scale = 0.92, pan = [0, 0], drawn = 0, ms = 0;
 
 // A single draw call of 124.9 million is refused by some drivers, so the SAME complete
 // population is drawn in passes. Paging is honest: the set is unchanged. Sampling would not be.
-const CHUNK = 8000000;
-// 37.8 billion cannot be drawn in one frame by any GPU. So the SAME complete population is
-// accumulated ACROSS frames without clearing: about eighty seconds to render the universe, with
-// the progress stated every frame. Nothing is skipped and nothing is sampled. When it completes
-// it says so; until then it says how far it has got.
-let cursor = 0, started = 0;
+// The exposure is interleaved. STRIDE passes, each drawing every STRIDE-th particle, so the
+// first pass lands in milliseconds and already shows the whole structure; each pass after it
+// adds detail. After STRIDE passes every particle has been drawn exactly once. This is
+// progressive refinement, not sampling: it converges on the complete set and says so.
+const STRIDE = 4096;
+let pass = 0, started = 0, perFrame = 3;
 
 function resize() {
   const d = 1;   // one device pixel per screen pixel: hard square dots, nothing smoothed
@@ -136,35 +146,36 @@ function resize() {
   cv.height = Math.floor(innerHeight * d);
   gl.viewport(0, 0, cv.width, cv.height);
 }
-addEventListener('resize', () => { resize(); cursor = 0; }); resize();
+addEventListener('resize', () => { resize(); pass = 0; }); resize();
 
 function frame() {
-  if (cursor === 0) {
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    started = performance.now();
-  }
+  if (pass === 0) { gl.clear(gl.COLOR_BUFFER_BIT); started = performance.now(); }
   gl.uniform1f(uN, N);
   gl.uniform1f(uS, scale);
   gl.uniform2f(uP, pan[0], pan[1]);
   gl.uniform1f(uA, cv.width / cv.height);
-  const budget = cursor + CHUNK * 8;                 // about 64 million per frame
-  while (cursor < N && cursor < budget) {
-    const n = Math.min(CHUNK, N - cursor);
-    gl.drawArrays(gl.POINTS, cursor, n);             // every particle, none skipped
-    cursor += n;
+  gl.uniform1f(uST, STRIDE);
+  const per = Math.ceil(N / STRIDE);
+  const t0 = performance.now();
+  let did = 0;
+  while (pass < STRIDE && did < perFrame) {
+    gl.uniform1f(uPA, pass);
+    gl.drawArrays(gl.POINTS, 0, per);
+    pass++; did++;
+    if (performance.now() - t0 > 12) break;          // keep the first frame in milliseconds
   }
-  const pct = (cursor / N * 100);
-  const secs = ((performance.now() - started) / 1000).toFixed(1);
-  hud.textContent = cursor >= N
-    ? 'showing ' + fmt(N) + ' of ' + fmt(N) + ' lines · COMPLETE in ' + secs + ' s'
-    : 'drawing ' + fmt(cursor) + ' of ' + fmt(N) + ' lines · ' + pct.toFixed(2) + '% · ' + secs + ' s';
+  const drawnNow = Math.min(N, pass * per);
+  const secs = (performance.now() - started) / 1000;
+  hud.textContent = pass >= STRIDE
+    ? 'showing ' + fmt(N) + ' of ' + fmt(N) + ' lines · COMPLETE in ' + secs.toFixed(1) + ' s'
+    : 'exposure ' + (pass / STRIDE * 100).toFixed(1) + '% · ' + fmt(drawnNow) + ' of ' + fmt(N)
+      + ' lines · ' + secs.toFixed(1) + ' s';
   requestAnimationFrame(frame);
 }
 
 // changing the view restarts the render, because a half drawn universe over a new camera
 // would be a picture of two different things at once.
-function restart() { cursor = 0; }
+function restart() { pass = 0; }
 addEventListener('keydown', e => {
   if (e.key === 'd') { N = (N === EVERY) ? DISTINCT : EVERY; restart(); label(); }
 });
