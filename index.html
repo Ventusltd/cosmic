@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>cosmic</title>
 <style>
-  :root{--ink:#e8e6e1;--dim:#8b919c;--line:#171a20}
+  :root{--ink:#e8e6e1;--dim:#8b919c;--line:#171a20;--warn:#e8b36a}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:#000;color:var(--ink);
     font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow:hidden}
@@ -23,6 +23,7 @@
   #foot{position:fixed;left:0;right:0;bottom:0;padding:8px 14px;color:var(--dim);
     border-top:1px solid var(--line);background:#000c;z-index:10;line-height:1.7}
   b{color:var(--ink);font-weight:600}
+  .warn{color:var(--warn)}
 </style>
 </head>
 <body>
@@ -30,46 +31,45 @@
 <canvas id="o"></canvas>
 <div id="top">
   <div id="big">loading</div>
-  <div id="sub">everything git logged</div>
+  <div id="sub">&nbsp;</div>
 </div>
 <div id="crt"></div>
 <div id="hud">starting</div>
 <div id="foot">
   <b>click</b> to travel in &middot; <b>backspace</b> to pull back &middot; drag to steer &middot;
-  scroll to zoom &middot; <b>l</b> names &middot; every particle is one line git has ever recorded
-  &middot; positions are computed from the ordinal, never stored &middot; provided as is, without
-  warranty of any kind; a chart, not a design
+  scroll to zoom &middot; <b>l</b> names &middot; positions are computed from the ordinal, never
+  stored &middot; provided as is, without warranty of any kind; a chart, not a design
 </div>
 <script type="module">
-// COSMIC IS THE ENGINE.
+// COSMIC IS THE ENGINE, AND IT KNOWS NOTHING.
 //
-// SEE IT AS IT IS. Nothing is coloured in. No particle is invented to fill a space, none is
-// thinned to make a picture, no number is softened. What is measured is drawn; what cannot be
-// resolved is declared unresolved and counted where it stands.
+// It has never heard of git, of wafers or of grids. It is handed a cartridge (universe.json): a
+// hierarchy that somebody measured, a placement law for each level, and the total those levels
+// must sum to. Swap the cartridge and the same engine draws a CPU, a solar farm or a network.
 //
-// HOW TO COUNT INFINITY WITHOUT BEING KILLED BY IT. Drawing 37.9 billion points on a million
-// pixels gives forty thousand lines to a pixel, which is a white flash and tells you nothing. The
-// real sky has the same problem and solves it two ways, and both are copied here exactly:
+// WHAT IT IS FOR. A number like 37.93 billion cannot be read and cannot be drawn: on a million
+// pixels it is forty thousand to a pixel, a white flash carrying no information. The way through
+// is the way the night sky works, and it is two rules:
 //
-//   CLUSTERING.  Matter is not spread evenly. Stars bind into clusters, clusters into galaxies,
-//                galaxies into superclusters, and between them are voids. The estate is already
-//                built the same way: estate -> repository -> commit -> line. Every level here is
-//                placed by the SAME law as the level above it, so the structure is self similar
-//                and the black between is structural, not decorative. The void is data.
+//   CLUSTERING.  Things are bound to other things. Every level is placed by the same law as the
+//                level above it, so the structure is self similar and the black between is
+//                structural, not decorative. The void is data. No body may take more than a
+//                third of the gap to its neighbour, so there is always space, at every level,
+//                for any number of children.
 //
 //   RESOLUTION.  A telescope does not resolve the whole sky at once. Beyond its reach an object
-//                is an unresolved source: you know it is there, you know how bright, you cannot
-//                see inside it. So a body here is drawn whole, with its line count stated, until
-//                you have travelled close enough that the screen can hold its lines. Then, and
-//                only then, every one of them is drawn.
+//                is an unresolved source: you know it is there, you know its brightness, you
+//                cannot see inside. The criterion is one thing per pixel, which is the surface
+//                brightness limit that stops a telescope resolving a galaxy into stars.
 //
-// Travel is the zoom. Distance is time: the centre of any level is its newest work and the rim is
-// its oldest, at every scale, so going outward is going backwards.
+// Travelling collapses the data to what is relevant, which is the only way to compute against
+// something this size. THE WHOLE IS NEVER LOST WHILE THIS HAPPENS. Every frame the engine
+// accounts for every unit in the cartridge as resolved, held, or outside the field, and checks
+// that the three sum to the total. If they ever do not it says MISACCOUNTED and does not pretend.
 //
-// THE COUNTS come from belt.tsv, one row per repository, and commits/NN.tsv, one row per commit,
-// fetched only when that sector is entered. They were measured by walking every path in every
-// commit's tree, copies counted each time they appear. The page will not draw a total it did not
-// load.
+// SEE IT AS IT IS. Nothing is coloured in, nothing is invented to fill a space, nothing is
+// thinned to make a picture, no number is softened.
+
 const GOLDEN = 2.399963229728653;
 // 0.6180339887... over 2^32: the golden angle as an exact integer ratio, so the angle is computed
 // in wrapping uint arithmetic and every ordinal gets its own, past 2^32 and beyond.
@@ -81,8 +81,8 @@ const o2  = ov.getContext('2d');
 const gl  = cv.getContext('webgl2', {
   antialias:false, alpha:false, powerPreference:'high-performance',
   // the exposure accumulates ACROSS frames. Without this the browser may discard the drawing
-  // buffer after each composite and every frame but the last is thrown away, while the
-  // instrument goes on reporting a whole exposure. Required, not an optimisation.
+  // buffer after each composite and every frame but the last is thrown away, while the instrument
+  // goes on reporting a whole exposure. Required, not an optimisation.
   preserveDrawingBuffer:true });
 const hud = document.getElementById('hud');
 const big = document.getElementById('big');
@@ -96,7 +96,7 @@ function words(n) {
   if (n >= 1e9)  return (n / 1e9 ).toFixed(2) + ' billion';
   if (n >= 1e6)  return (n / 1e6 ).toFixed(2) + ' million';
   if (n >= 1e3)  return (n / 1e3 ).toFixed(1) + ' thousand';
-  return String(n);
+  return String(Math.round(n));
 }
 
 if (!gl) {
@@ -104,11 +104,9 @@ if (!gl) {
   throw new Error('no webgl2');
 }
 
-// ------------------------------------------------------------------------------- the shaders
+// -------------------------------------------------------------------------------- the shaders
 const MAXB = 128;
 
-// bodies: one point per unresolved object. This is the sky at a distance, where a whole
-// repository is a single source because that is all the screen can hold.
 const VS_BODY = `#version 300 es
 precision highp float;
 uniform vec4 u_body[${MAXB}];   // clip x, clip y, radius in pixels, unused
@@ -124,19 +122,17 @@ precision highp float;
 in float v_px;
 out vec4 o;
 void main() {
-  // BINARY. Inside the body or outside it, hard edged, the way a monochrome display drew a disc.
-  // No glow, no falloff, nothing added that was not counted.
+  // BINARY. Inside the source or outside it, hard edged, the way a monochrome display drew a
+  // disc. No glow, no falloff, nothing added that was not counted.
   if (v_px > 1.5 && length(gl_PointCoord - 0.5) > 0.5) discard;
   o = vec4(0.87, 0.89, 0.86, 1.0);
 }`;
 
-// lines: every line of ONE object, placed inside it by the estate's own law. Drawn only when the
-// object is resolved, and then completely.
-const VS_LINE = `#version 300 es
+const VS_LEAF = `#version 300 es
 precision highp float;
 uniform vec2  u_c;        // the object's centre, in world units
-uniform float u_rho;      // the object's radius, in world units
-uniform float u_invn;     // 1 / its line count
+uniform float u_rho;      // its radius, in world units
+uniform float u_invn;     // 1 / its leaf count
 uniform uint  u_stride;
 uniform uint  u_pass;
 uniform uint  u_seed;     // the object's own phase, so two objects never share a pattern
@@ -150,8 +146,7 @@ void main() {
   // exact mod 2^32.
   float frac = (float(gl_VertexID) * float(u_stride) + float(u_pass)) * u_invn;
   if (frac >= 1.0) { gl_Position = vec4(2.0, 2.0, 0.0, 1.0); return; }
-  // sqrt gives uniform areal density inside the object, so its AREA is its share of the lines
-  float r = u_rho * sqrt(frac);
+  float r = u_rho * sqrt(frac);            // uniform areal density: AREA is the share
   uint k32 = u_seed + uint(gl_VertexID) * u_stride + u_pass;
   float a = 6.283185307179586 * float(k32 * ${GOLD32}u) * (1.0 / 4294967296.0);
   vec2 p = u_c + vec2(cos(a), sin(a)) * r;
@@ -160,12 +155,11 @@ void main() {
   gl_Position = vec4(p, 0.0, 1.0);
   gl_PointSize = 1.0;
 }`;
-const FS_LINE = `#version 300 es
+const FS_LEAF = `#version 300 es
 precision highp float;
 out vec4 o;
 void main() {
-  // A line either exists at this position or it does not. One or zero, no partial brightness,
-  // because there is no such thing as a partial line.
+  // A thing either exists at this position or it does not. One or zero, no partial brightness.
   o = vec4(0.87, 0.89, 0.86, 1.0);
 }`;
 
@@ -182,11 +176,11 @@ function build(vs, fs) {
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
   return p;
 }
-const PB = build(VS_BODY, FS_BODY), PL = build(VS_LINE, FS_LINE);
+const PB = build(VS_BODY, FS_BODY), PL = build(VS_LEAF, FS_LEAF);
 const uBody = gl.getUniformLocation(PB, 'u_body[0]');
-const L = n => gl.getUniformLocation(PL, n);
-const lC=L('u_c'), lRho=L('u_rho'), lInv=L('u_invn'), lStr=L('u_stride'), lPas=L('u_pass'),
-      lSeed=L('u_seed'), lSca=L('u_scale'), lPan=L('u_pan'), lAsp=L('u_aspect');
+const U = n => gl.getUniformLocation(PL, n);
+const lC=U('u_c'), lRho=U('u_rho'), lInv=U('u_invn'), lStr=U('u_stride'), lPas=U('u_pass'),
+      lSeed=U('u_seed'), lSca=U('u_scale'), lPan=U('u_pan'), lAsp=U('u_aspect');
 
 gl.bindVertexArray(gl.createVertexArray());   // no attributes, no buffers, nothing uploaded
 gl.disable(gl.BLEND);                         // coverage shows density, the way a CRT had to
@@ -194,100 +188,151 @@ gl.clearColor(0, 0, 0, 1);
 
 // THE INSTRUMENT REFUSES RATHER THAN APPROXIMATES, and that includes its own failure. A driver
 // reset loses the context and every draw after it silently does nothing, so an unguarded exposure
-// races to 100% and prints COMPLETE over an empty frame. That is the one lie this page must not
-// tell. Loss is caught, stated, and the exposure stops.
+// races to 100% and prints COMPLETE over an empty frame. Loss is caught, stated, and stops it.
 let lost = false;
 cv.addEventListener('webglcontextlost', e => {
   e.preventDefault(); lost = true;
   hud.textContent = 'CONTEXT LOST · the GPU dropped this exposure. Nothing on screen is a '
-    + 'complete count. Reload to point the telescope again.';
+    + 'complete count. Reload to point the instrument again.';
 });
 
-// ---------------------------------------------------------------------- the exposure's state
-// declared before anything can call restart()
+// ------------------------------------------------------------------------ the exposure's state
 const PER_CALL = 600000;   // nine million points in one call trips the driver watchdog
 let pass = 0, maxStride = 1, started = 0, fence = null, fenceAt = 0, perFrame = 1, retired = 0;
 function restart() { pass = 0; retired = 0; if (fence) { gl.deleteSync(fence); fence = null; } }
 
-// --------------------------------------------------------------------------- the placement
-// ONE LAW, USED AT EVERY LEVEL. Children are laid inside their parent's disc: orbit by age with
-// the newest at the centre, bearing by the golden angle so no two share a direction, and radius
-// as the square root of the share of lines so that AREA is the measurement. Scaled by the
-// parent's radius, this is the same law all the way down, which is why the structure is self
-// similar and why the voids appear on their own rather than being drawn in.
-// A_MIN WAS AN INVENTED HOLE. A minimum orbit clears the centre of every level, which reads as
-// structure and is not in the data. With it at zero the law is r = sqrt((i+0.5)/n), which fills
-// the disc at uniform areal density and puts the newest child at the centre, where it belongs.
-const A_MIN = 0.0, A_MAX = 1.0, RHO_MAX = 0.085, ORBIT_FILL = 0.88;
-const GAP_SHARE = 0.32;   // a body may occupy at most this much of the gap to its neighbour
-function place(children, cx, cy, P) {
+// ----------------------------------------------------------------------------- the placement
+// ONE LAW PER LEVEL, CHOSEN BY THE CARTRIDGE. Children are laid inside their parent's disc and
+// scaled by the parent's radius, so the same law applies all the way down and the structure is
+// self similar. An unknown law is refused, never quietly replaced by a default.
+const RHO_MAX = 0.085, ORBIT_FILL = 0.88, GAP_SHARE = 0.32;
+
+// THE VOID IS GUARANTEED, NOT HOPED FOR. n children sit at a typical separation of about
+// P/sqrt(n), so no child may have a radius larger than a third of that. Two neighbours always
+// have black between them, at every level, for any number of children, which is what makes the
+// vastness legible instead of a flood.
+function sizes(children, P) {
   const n = children.length;
-  const max = Math.max(...children.map(c => c.lines)) || 1;
-  // THE VOID IS GUARANTEED, NOT HOPED FOR. Golden angle placement puts n children at a typical
-  // separation of about P/sqrt(n), so no child is ever allowed a radius larger than a third of
-  // that. Two neighbours therefore always have black between them, at every level and for any
-  // number of children, which is what makes the vastness legible.
+  const max = Math.max(...children.map(c => c.value)) || 1;
   const spacing = (n === 1) ? P : ORBIT_FILL * P / Math.sqrt(n);
   const cap = Math.min(RHO_MAX * P, GAP_SHARE * spacing);
-  children.forEach((c, i) => {
-    if (n === 1) { c.x = cx; c.y = cy; }
-    else {
-      const a = P * ORBIT_FILL * (A_MIN + (A_MAX - A_MIN) * Math.sqrt((i + 0.5) / n));
-      const th = i * GOLDEN;
-      c.x = cx + a * Math.cos(th);
-      c.y = cy + a * Math.sin(th);
-    }
-    // within a level the areas are exactly proportional to the line counts, because every
-    // sibling is scaled by the same cap. ACROSS levels nothing is to scale, and it cannot be:
-    // a commit drawn to scale inside the estate would be smaller than an atom on this screen.
-    // The instrument says so rather than pretending the zoom is a ruler.
-    c.rho = cap * Math.sqrt(c.lines / max);
-    c.i = i;
-    c.seed = (c.seed === undefined) ? (i * 2654435761) >>> 0 : c.seed;
-  });
+  // within a level the areas are exactly proportional to the values, because every sibling is
+  // scaled by the same cap. ACROSS levels nothing is to scale and it cannot be: a commit drawn
+  // to true scale inside the estate would be smaller than an atom on this screen.
+  children.forEach(c => { c.rho = cap * Math.sqrt(c.value / max); });
 }
 
-// -------------------------------------------------------------------------------- the estate
-let root = null, TOTAL = 0, hover = null, names = false;
+const LAWS = {
+  // no preferred axis: gravitational clustering, and a repository's commits
+  areal(children, cx, cy, P) {
+    const n = children.length;
+    children.forEach((c, i) => {
+      if (n === 1) { c.x = cx; c.y = cy; return; }
+      const a = P * ORBIT_FILL * Math.sqrt((i + 0.5) / n);   // no minimum orbit: an inner hole
+      const th = i * GOLDEN;                                  // would be invented structure
+      c.x = cx + a * Math.cos(th);
+      c.y = cy + a * Math.sin(th);
+    });
+    sizes(children, P);
+  },
+  // A WAFER HAS A PREFERRED AXIS AND THE SPIRAL IS WRONG FOR IT. A scanner steps a rectangular
+  // reticle across a round substrate at a fixed pitch, and the collision between the square step
+  // and the circle is the entire geometry of a wafer map. Steps whose full extent falls outside
+  // the circle are printed but not usable: they are marked partial and counted separately,
+  // because silently dropping them would misstate the yield.
+  grid(children, cx, cy, P) {
+    const n = children.length;
+    const cols = Math.max(1, Math.ceil(Math.sqrt(n * 4 / Math.PI)));
+    const pitch = 2 * P / cols;
+    const cells = [];
+    for (let gy = 0; gy < cols && cells.length < n * 4; gy++) {
+      for (let gx = 0; gx < cols; gx++) {
+        const x = -P + (gx + 0.5) * pitch, y = -P + (gy + 0.5) * pitch;
+        const far = Math.hypot(Math.abs(x) + pitch/2, Math.abs(y) + pitch/2);
+        if (Math.hypot(x, y) > P) continue;                    // no step at all out here
+        cells.push({ x, y, partial: far > P });                // rim steps: printed, not usable
+      }
+    }
+    children.forEach((c, i) => {
+      const cell = cells[i % Math.max(1, cells.length)] || { x:0, y:0, partial:false };
+      c.x = cx + cell.x; c.y = cy + cell.y; c.partial = cell.partial;
+    });
+    sizes(children, P);
+    children.forEach(c => { c.rho = Math.min(c.rho, pitch * 0.34); });   // the void again
+  }
+};
 
-fetch('belt.tsv').then(r => r.ok ? r.text() : Promise.reject(r.status)).then(txt => {
-  const rows = txt.split('\n').filter(l => l && l[0] !== '#').map(l => {
-    const p = l.split('\t');
-    return { label:p[0], lines:+p[1], entries:+p[2], commits:+p[3], head:+p[4], first:+p[5],
-             kind:'repository' };
-  }).filter(r => r.lines > 0);
-  if (!rows.length) { hud.textContent = 'belt.tsv held no repositories. Refusing to draw.'; return; }
-  TOTAL = rows.reduce((a, r) => a + r.lines, 0);
-  rows.forEach((r, j) => { r.childUrl = 'commits/' + String(j).padStart(2, '0') + '.tsv'; });
-  place(rows, 0, 0, 1);
-  root = { label:'the estate', lines:TOTAL, children:rows, x:0, y:0, rho:1, kind:'estate' };
-  big.textContent = words(TOTAL) + ' lines';
-  sub.textContent = fmt(TOTAL) + ' exactly · ' + rows.length + ' repositories · '
-    + 'every line in every file in every commit, copies counted each time';
-}).catch(() => {
-  hud.textContent = 'belt.tsv did not load. The telescope will not invent a sky.';
+// -------------------------------------------------------------------------------- the cartridge
+let M = null, root = null, TOTAL = 0, hover = null, names = false, LEVELS = [];
+
+fetch('universe.json').then(r => r.ok ? r.json() : Promise.reject(r.status)).then(m => {
+  M = m; LEVELS = m.levels || [];
+  TOTAL = m.total;
+  for (const lv of LEVELS) {
+    if (!LAWS[lv.law]) {
+      hud.textContent = 'the cartridge asks for the placement law "' + lv.law + '", which this '
+        + 'engine does not have. Refusing rather than substituting another.';
+      throw new Error('unknown law');
+    }
+  }
+  return loadRows(LEVELS[0].source, 0);
+}).then(rows => {
+  if (!rows || !rows.length) throw new Error('empty');
+  const sum = rows.reduce((a, r) => a + r.value, 0);
+  if (sum !== TOTAL) {
+    // THE CARTRIDGE MUST ADD UP. A hierarchy whose top level does not sum to its declared total
+    // is a hierarchy nobody can be held to, and drawing it would launder the error.
+    hud.textContent = 'the cartridge declares ' + fmt(TOTAL) + ' but its top level sums to '
+      + fmt(sum) + '. Refusing to draw a total it cannot account for.';
+    throw new Error('mismatch');
+  }
+  LAWS[LEVELS[0].law](rows, 0, 0, 1);
+  root = { label:M.name, value:TOTAL, children:rows, x:0, y:0, rho:1, depth:-1 };
+  big.textContent = words(TOTAL) + ' ' + M.unit;
+  sub.textContent = fmt(TOTAL) + ' exactly · ' + fmt(rows.length) + ' '
+    + (LEVELS[0].plural || LEVELS[0].name) + ' · ' + (M.subtitle || '');
+}).catch(e => {
+  if (!hud.textContent || hud.textContent === 'starting')
+    hud.textContent = 'the cartridge did not load. The instrument will not invent a universe.';
 });
 
 // A SECTOR IS FETCHED ONLY WHEN IT IS ENTERED. Nobody looks at two sectors at once, so the whole
-// hierarchy is never downloaded. This is how GridAtlas already works, and it is the reason the
-// page opens in milliseconds however large the estate becomes.
-const pending = new Set();
-function requestChildren(node) {
-  if (node.children || node.noChildren || pending.has(node.childUrl)) return;
-  pending.add(node.childUrl);
-  fetch(node.childUrl).then(r => r.ok ? r.text() : Promise.reject(r.status)).then(txt => {
-    const rows = txt.split('\n').filter(l => l && l[0] !== '#').map(l => {
-      const p = l.split('\t');
-      return { label:p[3], unix:+p[0], lines:+p[1], entries:+p[2], kind:'commit' };
-    }).filter(r => r.lines > 0);
-    if (!rows.length) { node.noChildren = true; return; }
-    place(rows, node.x, node.y, node.rho);
-    node.children = rows;
-    restart();
-  }).catch(() => { node.noChildren = true; }).finally(() => pending.delete(node.childUrl));
+// hierarchy is never downloaded and the page opens in milliseconds however large it becomes.
+function loadRows(url, depth) {
+  const lv = LEVELS[depth];
+  return fetch(url).then(r => r.ok ? r.text() : Promise.reject(r.status)).then(txt =>
+    txt.split('\n').filter(l => l && l[0] !== '#').map((l, i) => {
+      const p = l.split('\t'), o = { depth, i, seed: (i * 2654435761) >>> 0 };
+      lv.columns.forEach((name, k) => {
+        o[name] = (name === 'label') ? p[k] : +p[k];
+      });
+      return o;
+    }).filter(r => r.value > 0));
 }
 
-// -------------------------------------------------------------------------------- the camera
+const pending = new Set();
+function requestChildren(node) {
+  const lv = LEVELS[node.depth];
+  if (node.children || node.noChildren || !lv || !lv.child) { node.noChildren = true; return; }
+  const url = lv.child.replace('{i2}', String(node.i).padStart(2, '0'));
+  if (pending.has(url)) return;
+  pending.add(url);
+  loadRows(url, node.depth + 1).then(rows => {
+    if (!rows.length) { node.noChildren = true; return; }
+    const sum = rows.reduce((a, r) => a + r.value, 0);
+    if (sum !== node.value) {
+      // a child level that does not sum to its parent would break the accounting, so it is
+      // refused for this node rather than allowed to quietly bend the total
+      node.badChildren = 'children sum to ' + fmt(sum) + ', parent holds ' + fmt(node.value);
+      node.noChildren = true; return;
+    }
+    LAWS[LEVELS[node.depth + 1].law](rows, node.x, node.y, node.rho);
+    node.children = rows;
+    restart();
+  }).catch(() => { node.noChildren = true; }).finally(() => pending.delete(url));
+}
+
+// --------------------------------------------------------------------------------- the camera
 let scale = 0.92, pan = [0, 0], tween = null;
 function resize() {
   cv.width = ov.width = Math.floor(innerWidth);
@@ -297,9 +342,8 @@ function resize() {
 }
 addEventListener('resize', resize); resize();
 
-// TRAVELLING. Clicking an object flies the camera into it. You are not filtering a list, you are
-// moving until the thing resolves, which is the only honest way to look at 37.9 billion of
-// anything.
+// TRAVELLING IS THE COMPUTE STRATEGY. Moving in collapses the set to what is relevant; the
+// accounting below is what stops that losing the whole.
 function travelTo(b, fill) {
   const s = (fill || 0.78) / b.rho;
   tween = { t0:performance.now(), dur:750, s0:scale, s1:s, p0:pan.slice(),
@@ -309,69 +353,60 @@ function stepTween() {
   if (!tween) return;
   const u = Math.min(1, (performance.now() - tween.t0) / tween.dur);
   const e = u < 0.5 ? 2*u*u : 1 - Math.pow(-2*u + 2, 2) / 2;
-  // zoom is geometric, so it is interpolated in the log; otherwise the last stretch of a long
-  // approach arrives all at once
   scale = Math.exp(Math.log(tween.s0) + (Math.log(tween.s1) - Math.log(tween.s0)) * e);
   pan = [tween.p0[0] + (tween.p1[0]-tween.p0[0])*e, tween.p0[1] + (tween.p1[1]-tween.p0[1])*e];
   restart();
   if (u >= 1) tween = null;
 }
 
-// ------------------------------------------------------------------- what the screen can hold
-// An object is RESOLVED when its lines can be told apart on the pixels it covers. Otherwise, if
-// its children are known, the telescope looks at them instead; if they are not, they are asked
-// for; and until they arrive the object is drawn as a source with its count stated. Nothing is
-// discarded and nothing is thinned. This is the honest version of "do not show 37.9 billion until
-// you are inside a sector".
-// THE RESOLVING CRITERION IS PHYSICS, NOT TASTE. Two sources are resolved when they fall in
-// different resolution elements; here the resolution element is the pixel, so the limit is ONE
-// line per pixel. Above that the lines overlap, coverage saturates, and the screen stops carrying
-// information: that is the white flash, and it is the same surface brightness limit that stops a
-// telescope resolving a galaxy into stars. Below it, exclusion holds: every line has a pixel of
-// its own and the count survives the drawing.
-const LINES_PER_PIXEL = 1;
-const CHILD_PX = 44;         // a source smaller than this keeps its children folded up
-const RING_PX = 56;          // beyond this an unresolved source is drawn as its boundary, because
-                             // a disc that fills the screen is a white flash, not a measurement
-let resolved = [], discs = [], rings = [], held = 0, heldN = 0, drawnLines = 0;
+// -------------------------------------------------------------- what the screen can hold
+// The criterion is physics, not taste: ONE THING PER PIXEL. Above that they overlap, coverage
+// saturates and the screen stops carrying information, which is the same surface brightness limit
+// that stops a telescope resolving a galaxy into stars. Below it, exclusion holds: every thing
+// has a pixel of its own and the count survives the drawing.
+const PER_PIXEL = 1;
+const CHILD_PX  = 44;        // a source smaller than this keeps its children folded up
+const RING_PX   = 56;        // beyond this an unresolved source is drawn as its boundary
+let resolved = [], discs = [], rings = [], held = 0, heldN = 0, drawn = 0, outside = 0;
 
 function walk(node, depth) {
   const R = cv.height / 2 * scale, asp = cv.width / cv.height;
   const sx = (node.x * scale + pan[0]) / asp, sy = node.y * scale + pan[1];
   const rpx = node.rho * R;
   const rx = rpx / (cv.width / 2), ry = rpx / (cv.height / 2);
-  if (sx + rx < -1.02 || sx - rx > 1.02 || sy + ry < -1.02 || sy - ry > 1.02) return;  // no field
-  if (rpx < 0.4) { held += node.lines; heldN++; return; }                     // below the grain
+  if (sx + rx < -1.02 || sx - rx > 1.02 || sy + ry < -1.02 || sy - ry > 1.02) {
+    outside += node.value; return;                      // outside the field, and counted as such
+  }
+  if (rpx < 0.4) { held += node.value; heldN++; return; }              // below the grain
 
-  const capacity = Math.PI * rpx * rpx * LINES_PER_PIXEL;
-  if (node.lines <= capacity) {
-    resolved.push(node); drawnLines += node.lines;
-    node.stride = Math.max(1, Math.ceil(node.lines / PER_CALL));
+  const capacity = Math.PI * rpx * rpx * PER_PIXEL;
+  if (node.value <= capacity) {
+    resolved.push(node); drawn += node.value;
+    node.stride = Math.max(1, Math.ceil(node.value / PER_CALL));
     maxStride = Math.max(maxStride, node.stride);
     return;
   }
   // A PARENT ONLY DISSOLVES INTO ITS CHILDREN WHEN THE CHILDREN CAN BE SEEN. Descending too
   // early replaces one visible source with five thousand sub pixel ones and the sky goes empty,
-  // which is a worse lie than the disc: the lines are still there, and so is the object.
+  // which is a worse lie than the disc: the things are still there, and so is the object.
   if (node.children && depth < 8 && rpx > CHILD_PX) {
     for (const c of node.children) walk(c, depth + 1);
     return;
   }
-  if (node.childUrl && rpx > CHILD_PX * 0.5) requestChildren(node);
-  held += node.lines; heldN++;
-  // surface brightness: lines per pixel over the source's own disc. This is the number that
+  if (rpx > CHILD_PX * 0.5) requestChildren(node);
+  held += node.value; heldN++;
+  // surface brightness: things per pixel over the source's own disc. This is the number that
   // decides whether it can be resolved, so it is the number the instrument shows.
-  node.perPixel = node.lines / Math.max(1, Math.PI * rpx * rpx);
-  if (rpx > RING_PX) rings.push({ node, sx, sy, rpx });
-  else discs.push({ sx, sy, rpx });
+  node.perPixel = node.value / Math.max(1, Math.PI * rpx * rpx);
+  if (rpx > RING_PX) rings.push({ node, rpx }); else discs.push({ sx, sy, rpx });
 }
 
 function classify() {
-  resolved = []; discs = []; rings = []; held = 0; heldN = 0; drawnLines = 0; maxStride = 1;
-  if (root) for (const c of root.children) walk(c, 1);
+  resolved = []; discs = []; rings = []; held = 0; heldN = 0; drawn = 0; outside = 0; maxStride = 1;
+  if (root) for (const c of root.children) walk(c, 0);
 }
 
-// ------------------------------------------------------------------------------ the exposure
+// ------------------------------------------------------------------------------- the exposure
 function frame() {
   if (lost) return;
   stepTween();
@@ -420,11 +455,11 @@ function frame() {
         if (pass >= b.stride) continue;
         gl.uniform2f(lC, b.x, b.y);
         gl.uniform1f(lRho, b.rho);
-        gl.uniform1f(lInv, 1 / b.lines);
+        gl.uniform1f(lInv, 1 / b.value);
         gl.uniform1ui(lStr, b.stride);
         gl.uniform1ui(lPas, pass);
         gl.uniform1ui(lSeed, b.seed >>> 0);
-        gl.drawArrays(gl.POINTS, 0, Math.ceil(b.lines / b.stride));
+        gl.drawArrays(gl.POINTS, 0, Math.ceil(b.value / b.stride));
       }
       pass++;
     }
@@ -434,40 +469,45 @@ function frame() {
     retired = pass = maxStride;
   }
 
-  const secs = (performance.now() - started) / 1000;
+  // ---------------------------------------------------------------- the accounting invariant
+  // TRAVELLING MUST NOT LOSE THE WHOLE. Every unit in the cartridge is in exactly one of three
+  // states every frame, and the three must sum to the total. This is the check that makes the
+  // zoom safe to compute against: relevance without amnesia.
+  const accounted = drawn + held + outside;
   const done = retired >= maxStride;
-  const shown = done ? drawnLines : Math.floor(drawnLines * (retired / maxStride));
+  const shown = done ? drawn : Math.floor(drawn * (retired / maxStride));
+  const u = M.unit;
   const lines = [];
-  if (drawnLines) lines.push(done
-    ? 'resolved ' + words(drawnLines) + ' lines · ' + fmt(drawnLines) + ' exactly · '
-      + resolved.length + (resolved.length === 1 ? ' object' : ' objects')
-    : 'resolving ' + words(shown) + ' of ' + words(drawnLines) + ' lines · '
-      + (retired / maxStride * 100).toFixed(0) + '% · ' + secs.toFixed(1) + ' s');
-  if (held) lines.push(words(held) + ' lines held in ' + fmt(heldN)
-    + (heldN === 1 ? ' unresolved source' : ' unresolved sources'));
-  if (!drawnLines && !held) lines.push('nothing in the field');
-  lines.push((TOTAL ? (((drawnLines + held) / TOTAL) * 100).toFixed(1) : '0')
-    + '% of the estate is in this field');
-  // Olbers asked why the night sky is dark if the universe is full of stars. The answer is that
-  // it is finite in age and the light has not all arrived. This sky is dark for the same reason:
-  // it is finite, and what has not been resolved has not arrived.
+  lines.push('the whole · ' + words(TOTAL) + ' ' + u);
+  lines.push('resolved ' + words(shown) + (done ? '' : ' of ' + words(drawn))
+    + ' · held ' + words(held) + ' in ' + fmt(heldN)
+    + (heldN === 1 ? ' source' : ' sources')
+    + ' · outside ' + words(outside));
+  if (accounted !== TOTAL) {
+    lines.push('MISACCOUNTED by ' + fmt(TOTAL - accounted) + ' ' + u);
+  } else if (!done) {
+    lines.push('exposing ' + (retired / maxStride * 100).toFixed(0) + '% · '
+      + ((performance.now() - started) / 1000).toFixed(1) + ' s');
+  } else {
+    lines.push('every ' + u.replace(/s$/, '') + ' accounted for');
+  }
   lines.push('distance is time · outward is older · levels are not to scale');
   hud.textContent = lines.join('\n');
+  hud.className = (accounted !== TOTAL) ? 'warn' : '';
   overlay();
   requestAnimationFrame(frame);
 }
 
-// ------------------------------------------------------- boundaries and names, without clutter
+// ------------------------------------------------ boundaries and names, without the clutter
 // An unresolved source larger than the screen is drawn as its BOUNDARY with its count beside it.
-// Filling it white would say "here are the lines" when the lines are precisely what has not been
-// drawn. The telescope cannot look every direction at once, but it can say where the directions
-// are, so only the object under the pointer is named unless names are asked for.
+// Filling it white would say "here are the things" when the things are precisely what has not
+// been drawn. Only the object under the pointer is named unless names are asked for.
 function overlay() {
   o2.clearRect(0, 0, ov.width, ov.height);
   if (!root) return;
-  const toPx = n => [ (n.x * scale + pan[0]) / (ov.width/ov.height) * ov.width/2 + ov.width/2,
+  const asp = ov.width / ov.height, R = ov.height / 2 * scale;
+  const toPx = n => [ (n.x * scale + pan[0]) / asp * ov.width/2 + ov.width/2,
                       ov.height/2 - (n.y * scale + pan[1]) * ov.height/2 ];
-  const R = ov.height / 2 * scale;
   o2.font = '11px ui-monospace,Consolas,monospace';
 
   for (const r of rings) {
@@ -477,9 +517,11 @@ function overlay() {
     o2.beginPath(); o2.arc(x, y, r.rpx, 0, 6.2832); o2.stroke();
     o2.setLineDash([]);
     o2.fillStyle = 'rgba(232,230,225,0.8)';
-    o2.fillText(r.node.label + '  ·  ' + words(r.node.lines) + ' lines  ·  '
-      + words(Math.round(r.node.perPixel)) + ' lines per pixel, beyond resolving'
-      + (r.node.children ? '' : '  ·  keep travelling'), x - r.rpx + 8, y - r.rpx - 6);
+    o2.fillText(r.node.label + '  ·  ' + words(r.node.value) + ' ' + M.unit + '  ·  '
+      + words(r.node.perPixel) + ' per pixel, beyond resolving'
+      + (r.node.badChildren ? '  ·  ' + r.node.badChildren
+         : r.node.children ? '' : '  ·  keep travelling'),
+      x - r.rpx + 8, y - r.rpx - 6);
   }
 
   const show = names ? (root.children || []) : (hover ? [hover] : []);
@@ -492,9 +534,9 @@ function overlay() {
     o2.beginPath(); o2.arc(x, y, Math.max(3, rpx) + 4, 0, 6.2832); o2.stroke();
     o2.fillStyle = hot ? '#e8e6e1' : 'rgba(139,145,156,0.75)';
     o2.fillText(hot
-      ? b.label + '   ' + words(b.lines) + ' lines   ' + fmt(b.lines) + ' exactly   '
+      ? b.label + '   ' + words(b.value) + ' ' + M.unit + '   ' + fmt(b.value) + ' exactly   '
         + (b.commits !== undefined ? fmt(b.commits) + ' commits   ' : '')
-        + (b.lines / TOTAL * 100).toFixed(2) + '% of the estate'
+        + (b.value / TOTAL * 100).toFixed(2) + '%'
       : b.label, x + Math.max(3, rpx) + 8, y - 4);
   }
 }
@@ -518,7 +560,7 @@ function pick(px, py) {
   })(root, 0);
 }
 
-// ------------------------------------------------------------------------------- the controls
+// -------------------------------------------------------------------------------- the controls
 let drag = null, moved = 0;
 cv.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; moved = 0; });
 addEventListener('pointerup', e => {

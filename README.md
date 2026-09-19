@@ -40,6 +40,44 @@ exclusion holds: every line has a pixel of its own and the count survives the dr
 You do not see 37.93 billion until you are inside a sector small enough to hold them. Travelling
 is the zoom, and nothing is thinned to make the trip easier.
 
+## A universe is a cartridge
+
+The engine knows nothing. It has never heard of git, of wafers or of grids. It is handed
+`universe.json` — a hierarchy somebody measured, a named placement law for each level, and the
+total those levels must sum to. Swap the cartridge and the same engine draws a CPU, a solar farm
+or a network. Nothing in the engine changes.
+
+The cartridge is refused, on screen, if:
+
+- it names a placement law the engine does not have — never quietly substituted with a default
+- its top level does not sum to its declared total
+- a child level does not sum to its parent
+
+The laws so far:
+
+| law | placement | where it is true |
+|---|---|---|
+| `areal` | `r = sqrt((i+0.5)/n)`, `theta = i x golden angle` | no preferred axis: gravitational clustering, a repository's commits |
+| `grid` | stepper pitch tiled and clipped to the circle, rim steps marked partial | a wafer: a scanner steps a rectangular reticle across a round substrate, and that collision is the geometry |
+
+A wafer drawn on the spiral would be a lie about how silicon is made, which is why the law is the
+part that carries the truth and the part a cartridge must declare.
+
+## Travelling must not lose the whole
+
+Zooming is not a view, it is the compute strategy: it collapses the set to what is relevant, which
+is the only way to work against something this size. The risk is obvious — you end up holding a
+fragment and forgetting the rest exists.
+
+So every unit in the cartridge is in exactly one of three states, every frame:
+
+    resolved  +  held  +  outside the field  =  the whole
+
+The engine computes all three and checks the sum on every frame. If it ever fails, the instrument
+prints **MISACCOUNTED** and the amount, and does not pretend otherwise. Travel into globalgrid2050
+and the readout says: resolved 0, held 35.56 billion in 5,054 sources, outside 2.37 billion — and
+those add to 37.93 billion.
+
 ## What the positions mean
 
 **Distance is time.** At every level the centre is the newest work and the rim the oldest, so

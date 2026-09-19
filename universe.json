@@ -1,0 +1,46 @@
+{
+  "_": "A UNIVERSE IS A CARTRIDGE. The engine holds no knowledge of git, of wafers or of grids. It is given a hierarchy that was measured, a placement law for each level, and the totals those levels must sum to. Swap this file and the same engine draws a CPU, a solar farm or a network. Nothing else changes.",
+
+  "name": "the estate",
+  "subtitle": "every line in every file in every commit, copies counted each time",
+  "unit": "lines",
+  "total": 37929011953,
+
+  "asof": "2026-09-19T11:24:27+01:00",
+  "measured_by": "tools/clusters.py, walking every path in every commit's tree",
+  "cross_checked_by": "tools/belt_split.py, an independent walk with identical line and entry totals",
+  "also_measured": {
+    "_": "an earlier pass the same day, twelve self-hosted runners sharded by content SHA, over 66 repositories rather than 67. Both figures are real; the estate grew overnight by one repository and 132,966,860 lines.",
+    "total": 37796045093,
+    "repositories": 66,
+    "entries": 14998313
+  },
+
+  "levels": [
+    {
+      "name": "repository",
+      "plural": "repositories",
+      "law": "areal",
+      "source": "belt.tsv",
+      "columns": ["label", "value", "entries", "commits", "head", "first"],
+      "child": "commits/{i2}.tsv",
+      "_": "value is entry_lines: every path in every commit of that repository. Additive across repositories with no double counting, because an entry belongs to exactly one commit in exactly one repository."
+    },
+    {
+      "name": "commit",
+      "plural": "commits",
+      "law": "areal",
+      "columns": ["unix", "value", "entries", "label"],
+      "child": null,
+      "_": "the leaf level of the measurement. Below a commit the engine draws its lines, one particle each, because the count is known exactly and the positions are computed."
+    }
+  ],
+
+  "leaf": { "name": "line", "plural": "lines" },
+
+  "laws": {
+    "_": "declared here so a cartridge cannot silently get a law the engine does not have. An unknown law is refused on screen, not quietly replaced.",
+    "areal": "r = sqrt((i+0.5)/n), theta = i * golden angle. Uniform areal density, so AREA is the share. Correct where there is no preferred axis: gravitational clustering, and a repository's commits.",
+    "grid": "a stepper grid at fixed pitch, clipped to the circle, with the incomplete steps at the rim marked partial and counted separately. Correct for a wafer, because a scanner steps a rectangular reticle across a round substrate and that collision is the whole geometry."
+  }
+}
