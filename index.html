@@ -150,6 +150,8 @@ uniform uint  u_seed;     // the object's own phase, so two objects never share 
 uniform float u_scale;
 uniform vec2  u_pan;
 uniform float u_aspect;
+uniform float u_shape;    // 0 a disc, 1 a rectangle
+uniform vec2  u_half;     // half extents, when it is a rectangle
 void main() {
   // THE ORDINAL DOES NOT FIT IN A FLOAT. At 3.5e10 a float32 step is 4096, so building k as a
   // float would quantise it and every pass would land on the same positions. The fraction comes
@@ -157,10 +159,21 @@ void main() {
   // exact mod 2^32.
   float frac = (float(gl_VertexID) * float(u_stride) + float(u_pass)) * u_invn;
   if (frac >= 1.0) { gl_Position = vec4(2.0, 2.0, 0.0, 1.0); return; }
-  float r = u_rho * sqrt(frac);            // uniform areal density: AREA is the share
   uint k32 = u_seed + uint(gl_VertexID) * u_stride + u_pass;
-  float a = 6.283185307179586 * float(k32 * ${GOLD32}u) * (1.0 / 4294967296.0);
-  vec2 p = u_c + vec2(cos(a), sin(a)) * r;
+  vec2 p;
+  if (u_shape > 0.5) {
+    // A RECTANGLE IS NOT A DISC, AND A SPIRAL INSIDE ONE WOULD BE A LIE ABOUT THE OBJECT. This is
+    // the R2 sequence, the two dimensional generalisation of the golden ratio: two irrational
+    // multipliers held as exact ratios over 2^32, which fills a rectangle at uniform density with
+    // no clumping and no visible lattice. Same discipline as the golden angle, one dimension up.
+    float fx = float(k32 * 3242174889u) * (1.0 / 4294967296.0);
+    float fy = float(k32 * 2447445413u) * (1.0 / 4294967296.0);
+    p = u_c + (vec2(fx, fy) - 0.5) * 2.0 * u_half;
+  } else {
+    float r = u_rho * sqrt(frac);          // uniform areal density: AREA is the share
+    float a = 6.283185307179586 * float(k32 * ${GOLD32}u) * (1.0 / 4294967296.0);
+    p = u_c + vec2(cos(a), sin(a)) * r;
+  }
   p = p * u_scale + u_pan;
   p.x /= u_aspect;
   gl_Position = vec4(p, 0.0, 1.0);
@@ -191,7 +204,8 @@ const PB = build(VS_BODY, FS_BODY), PL = build(VS_LEAF, FS_LEAF);
 const uBody = gl.getUniformLocation(PB, 'u_body[0]');
 const U = n => gl.getUniformLocation(PL, n);
 const lC=U('u_c'), lRho=U('u_rho'), lInv=U('u_invn'), lStr=U('u_stride'), lPas=U('u_pass'),
-      lSeed=U('u_seed'), lSca=U('u_scale'), lPan=U('u_pan'), lAsp=U('u_aspect');
+      lSeed=U('u_seed'), lSca=U('u_scale'), lPan=U('u_pan'), lAsp=U('u_aspect'),
+      lShape=U('u_shape'), lHalf=U('u_half');
 
 gl.bindVertexArray(gl.createVertexArray());   // no attributes, no buffers, nothing uploaded
 gl.disable(gl.BLEND);                         // coverage shows density, the way a CRT had to
@@ -234,6 +248,22 @@ function sizes(children, P) {
 }
 
 const LAWS = {
+  // POSITIONS AS DATA. A stepper put the dies where they are; no law of mine gets to move them.
+  // The engine only rescales the measured coordinates into the parent's disc and draws what it
+  // was given. This is the law that keeps a wafer a wafer.
+  explicit(children, cx, cy, P) {
+    const e = (M && M.extent_mm) || 1;
+    children.forEach(c => {
+      if (!c.src) c.src = { x:c.x, y:c.y, w:c.w, h:c.h };
+      c.shape = 'rect';
+      c.hw = (c.src.w / 2) / e * P;
+      c.hh = (c.src.h / 2) / e * P;
+      c.x  = cx + (c.src.x / e) * P;
+      c.y  = cy + (c.src.y / e) * P;
+      c.rad = Math.hypot(c.hw, c.hh);                        // bounding radius, for the field test
+      c.rho = Math.sqrt((4 * c.hw * c.hh) / Math.PI);        // equal-area radius, for capacity
+    });
+  },
   // no preferred axis: gravitational clustering, and a repository's commits
   areal(children, cx, cy, P) {
     const n = children.length;
@@ -245,6 +275,7 @@ const LAWS = {
       c.y = cy + a * Math.sin(th);
     });
     sizes(children, P);
+    children.forEach(c => { c.shape = 'disc'; c.rad = c.rho; });
   },
   // A WAFER HAS A PREFERRED AXIS AND THE SPIRAL IS WRONG FOR IT. A scanner steps a rectangular
   // reticle across a round substrate at a fixed pitch, and the collision between the square step
@@ -269,14 +300,16 @@ const LAWS = {
       c.x = cx + cell.x; c.y = cy + cell.y; c.partial = cell.partial;
     });
     sizes(children, P);
-    children.forEach(c => { c.rho = Math.min(c.rho, pitch * 0.34); });   // the void again
+    children.forEach(c => { c.rho = Math.min(c.rho, pitch * 0.34); c.shape = 'disc'; c.rad = c.rho; });
   }
 };
 
 // -------------------------------------------------------------------------------- the cartridge
 let M = null, root = null, TOTAL = 0, hover = null, names = false, LEVELS = [];
 
-fetch('universe.json').then(r => r.ok ? r.json() : Promise.reject(r.status)).then(m => {
+// ONE ENGINE, MANY WORLDS. ?u=wafer.json loads a wafer, ?u=universe.json the estate.
+const CART = new URLSearchParams(location.search).get('u') || 'universe.json';
+fetch(CART).then(r => r.ok ? r.json() : Promise.reject(r.status)).then(m => {
   M = m; LEVELS = m.levels || [];
   TOTAL = m.total;
   for (const lv of LEVELS) {
@@ -366,8 +399,13 @@ function findByOrdinal(rows, k) {
 }
 // where a leaf sits inside its object: the same arithmetic the vertex shader does, run backwards
 function leafPosition(node, m) {
-  const r = node.rho * Math.sqrt((m + 0.5) / node.value);
   const k32 = (node.seed + m) >>> 0;
+  if (node.shape === 'rect') {                      // the same R2 sequence the shader uses
+    const fx = (Math.imul(k32, 3242174889) >>> 0) / 4294967296;
+    const fy = (Math.imul(k32, 2447445413) >>> 0) / 4294967296;
+    return [node.x + (fx - 0.5) * 2 * node.hw, node.y + (fy - 0.5) * 2 * node.hh];
+  }
+  const r = node.rho * Math.sqrt((m + 0.5) / node.value);
   const a = 6.283185307179586 * ((Math.imul(k32, GOLD32) >>> 0) / 4294967296);
   return [node.x + Math.cos(a) * r, node.y + Math.sin(a) * r];
 }
@@ -393,7 +431,7 @@ async function collapseTo(k) {
   // of resolving and the traveller staring at a boundary they just crossed
   const needPx = Math.sqrt(node.value / (Math.PI * PER_PIXEL)) * 1.12;
   let s = needPx / (node.rho * (cv.height / 2));
-  s = Math.max(0.5 / node.rho, Math.min(1e12, s));
+  s = Math.max(0.5 / (node.rad || node.rho), Math.min(1e12, s));
   tween = { t0:performance.now(), dur:900, s0:scale, s1:s, p0:pan.slice(), p1:[-lx*s, -ly*s] };
   target = { k, x:lx, y:ly, m:local, node, path, fetches,
              address: path.map(n => n.label).join(' / ') + ' # ' + fmt(local) };
@@ -412,7 +450,7 @@ addEventListener('resize', resize); resize();
 // TRAVELLING IS THE COMPUTE STRATEGY. Moving in collapses the set to what is relevant; the
 // accounting below is what stops that losing the whole.
 function travelTo(b, fill) {
-  const s = (fill || 0.78) / b.rho;
+  const s = (fill || 0.78) / (b.rad || b.rho);
   tween = { t0:performance.now(), dur:750, s0:scale, s1:s, p0:pan.slice(),
             p1:[-b.x * s, -b.y * s] };
 }
@@ -437,17 +475,19 @@ function stepTween() {
 const PER_PIXEL = 1 / 30;
 const CHILD_PX  = 44;        // a source smaller than this keeps its children folded up
 const RING_PX   = 56;        // beyond this an unresolved source is drawn as its boundary
-let resolved = [], discs = [], rings = [], held = 0, heldN = 0, drawn = 0, outside = 0;
+let resolved = [], discs = [], rings = [], rects = [], held = 0, heldN = 0, drawn = 0, outside = 0;
+const viewOf = d => (LEVELS[d] && LEVELS[d].view) || 'field';
 
 function walk(node, depth) {
   const R = cv.height / 2 * scale, asp = cv.width / cv.height;
   const sx = (node.x * scale + pan[0]) / asp, sy = node.y * scale + pan[1];
-  const rpx = node.rho * R;
-  const rx = rpx / (cv.width / 2), ry = rpx / (cv.height / 2);
+  const rpx  = node.rho * R;                       // equal-area radius: what capacity is about
+  const radp = (node.rad || node.rho) * R;         // bounding radius: what the field test is about
+  const rx = radp / (cv.width / 2), ry = radp / (cv.height / 2);
   if (sx + rx < -1.02 || sx - rx > 1.02 || sy + ry < -1.02 || sy - ry > 1.02) {
     outside += node.value; return;                      // outside the field, and counted as such
   }
-  if (rpx < 0.4) { held += node.value; heldN++; return; }              // below the grain
+  if (radp < 0.4) { held += node.value; heldN++; return; }              // below the grain
 
   const capacity = Math.PI * rpx * rpx * PER_PIXEL;
 
@@ -462,12 +502,12 @@ function walk(node, depth) {
   // worse lie than the disc: the things are still there, and so is the object.
   const lv = LEVELS[node.depth];
   const canDescend = lv && lv.child && !node.noChildren;
-  if (canDescend && rpx > CHILD_PX) {
+  if (canDescend && radp > CHILD_PX) {
     if (node.children && depth < 8) { for (const c of node.children) walk(c, depth + 1); return; }
     requestChildren(node);
     held += node.value; heldN++;
     node.perPixel = node.value / Math.max(1, Math.PI * rpx * rpx);
-    if (rpx > RING_PX) rings.push({ node, rpx }); else discs.push({ sx, sy, rpx });
+    unresolvedInto(node, sx, sy, rpx, radp, depth);
     return;
   }
   // below the size where children could be told apart, the child structure is sub pixel anyway,
@@ -478,16 +518,31 @@ function walk(node, depth) {
     maxStride = Math.max(maxStride, node.stride);
     return;
   }
-  if (canDescend && rpx > CHILD_PX * 0.5) requestChildren(node);
+  if (canDescend && radp > CHILD_PX * 0.5) requestChildren(node);
   held += node.value; heldN++;
   // surface brightness: things per pixel over the source's own disc. This is the number that
   // decides whether it can be resolved, so it is the number the instrument shows.
   node.perPixel = node.value / Math.max(1, Math.PI * rpx * rpx);
-  if (rpx > RING_PX) rings.push({ node, rpx }); else discs.push({ sx, sy, rpx });
+  unresolvedInto(node, sx, sy, rpx, radp, depth);
+}
+
+// HOW AN UNRESOLVED THING IS SHOWN DEPENDS ON WHAT IT IS. In a field it is a source: a disc, or
+// its boundary if it fills the screen. In a SECTION it is an engineering object and must be drawn
+// as one, an outline on a hard grid, dashed when the field is partial. A die drawn as a fuzzy dot
+// would throw away the only structure that matters, which is exactly what must not happen when
+// you arrive at a wafer.
+function unresolvedInto(node, sx, sy, rpx, radp, depth) {
+  if (viewOf(node.depth) === 'section' && node.shape === 'rect') {
+    rects.push({ node, sx, sy });
+  } else if (radp > RING_PX) {
+    rings.push({ node, rpx: radp });
+  } else {
+    discs.push({ sx, sy, rpx: radp });
+  }
 }
 
 function classify() {
-  resolved = []; discs = []; rings = []; held = 0; heldN = 0; drawn = 0; outside = 0; maxStride = 1;
+  resolved = []; discs = []; rings = []; rects = []; held = 0; heldN = 0; drawn = 0; outside = 0; maxStride = 1;
   if (root) for (const c of root.children) walk(c, 0);
 }
 
@@ -544,6 +599,8 @@ function frame() {
         gl.uniform1ui(lStr, b.stride);
         gl.uniform1ui(lPas, pass);
         gl.uniform1ui(lSeed, b.seed >>> 0);
+        gl.uniform1f(lShape, b.shape === 'rect' ? 1 : 0);
+        gl.uniform2f(lHalf, b.hw || 0, b.hh || 0);
         gl.drawArrays(gl.POINTS, 0, Math.ceil(b.value / b.stride));
       }
       pass++;
@@ -597,6 +654,53 @@ function overlay() {
   const toPx = n => [ (n.x * scale + pan[0]) / asp * ov.width/2 + ov.width/2,
                       ov.height/2 - (n.y * scale + pan[1]) * ov.height/2 ];
   o2.font = '11px ui-monospace,Consolas,monospace';
+
+  // ---------------------------------------------------------------- the section, drawn as one
+  // THE SUBSTRATE IS PART OF THE DRAWING. A wafer map is the collision between a rectangular step
+  // and a round substrate, so the circle, the exclusion ring and the notch are not decoration:
+  // they are what make the partial fields at the rim mean anything.
+  if (M && M.extent_mm && LEVELS.some((l, i) => viewOf(i) === 'section')) {
+    const [zx, zy] = toPx({ x:0, y:0 });
+    o2.lineWidth = 1;
+    o2.strokeStyle = 'rgba(232,230,225,0.6)';
+    o2.beginPath(); o2.arc(zx, zy, R, 0, 6.2832); o2.stroke();
+    const ee = M.inputs && M.inputs.edge_exclusion_mm;
+    if (ee) {
+      o2.strokeStyle = 'rgba(139,145,156,0.55)'; o2.setLineDash([5, 5]);
+      o2.beginPath(); o2.arc(zx, zy, R * (1 - ee / M.extent_mm), 0, 6.2832); o2.stroke();
+      o2.setLineDash([]);
+      if (R > 120) {
+        o2.fillStyle = 'rgba(139,145,156,0.8)';
+        o2.fillText(ee + ' mm edge exclusion', zx + 8, zy - R * (1 - ee / M.extent_mm) - 6);
+      }
+    }
+    // the notch: crystal orientation, and the only thing that tells you which way the wafer is up
+    const nr = Math.max(3, R * (1.5 / M.extent_mm));
+    o2.strokeStyle = 'rgba(232,230,225,0.6)';
+    o2.beginPath(); o2.arc(zx, zy + R, nr, Math.PI, 0); o2.stroke();
+  }
+
+  // dies: outlines on the stepper grid. A full field is solid, a partial field is dashed, because
+  // a partial field is printed and discarded and must never be mistaken for yield.
+  if (rects.length) {
+    const wide = rects.length < 400;
+    for (const q of rects) {
+      const n = q.node;
+      const [x, y] = toPx(n);
+      const w = n.hw * R * 2, h = n.hh * R * 2;
+      if (w < 1.2 || x + w < -40 || x - w > ov.width + 40) continue;
+      const part = n.kind === 'partial';
+      o2.strokeStyle = part ? 'rgba(139,145,156,0.75)' : 'rgba(232,230,225,0.85)';
+      o2.lineWidth = 1;
+      if (part) o2.setLineDash([3, 3]);
+      o2.strokeRect(Math.round(x - w/2) + 0.5, Math.round(y - h/2) + 0.5, Math.round(w), Math.round(h));
+      o2.setLineDash([]);
+      if (wide && w > 46) {
+        o2.fillStyle = part ? 'rgba(139,145,156,0.7)' : 'rgba(232,230,225,0.6)';
+        o2.fillText(part ? 'partial' : n.label, x - w/2 + 4, y - h/2 + 13);
+      }
+    }
+  }
 
   for (const r of rings) {
     const [x, y] = toPx(r.node);
@@ -658,7 +762,10 @@ function pick(px, py) {
   (function scan(node, depth) {
     for (const c of (node.children || [])) {
       const d = Math.hypot(wx - c.x, wy - c.y);
-      if (d < Math.max(c.rho, grain) && d < best) { best = d; hover = c; }
+      const hit = (c.shape === 'rect')
+        ? (Math.abs(wx - c.x) <= Math.max(c.hw, grain) && Math.abs(wy - c.y) <= Math.max(c.hh, grain))
+        : d < Math.max(c.rho, grain);
+      if (hit && d < best) { best = d; hover = c; }
       if (c.children && depth < 8) scan(c, depth + 1);
     }
   })(root, 0);

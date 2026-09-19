@@ -1,0 +1,69 @@
+{
+ "_": "A WAFER IS NOT A SKY. Every level here declares its own law and its own view, so arriving at a wafer gives you a wafer: an orthogonal stepper grid clipped to a round substrate, with the partial fields at the rim drawn and counted rather than quietly dropped. The engine is the same one that draws 37.93 billion lines of git.",
+ "name": "300 mm wafer",
+ "subtitle": "computed geometry from the standards, not a measured lot",
+ "unit": "square micrometres",
+ "total": 67518045832,
+ "provenance": "computed",
+ "computed_by": "tools/wafer.py, from stated inputs; no lot was measured",
+ "inputs": {
+  "wafer_diameter_mm": 300.0,
+  "edge_exclusion_mm": 3.0,
+  "die_mm": [
+   26.0,
+   33.0
+  ],
+  "scribe_mm": 0.08,
+  "stepper_pitch_mm": [
+   26.08,
+   33.08
+  ]
+ },
+ "derived": {
+  "wafer_area_um2": 70685834706,
+  "usable_area_um2": 67886675651,
+  "silicon_under_printed_fields_um2": 67518045832,
+  "checks": {
+   "_": "the printed silicon cannot exceed the usable area, and does not",
+   "printed_le_usable": true
+  },
+  "full_fields": 57,
+  "partial_fields": 40,
+  "gross_die_per_wafer": 57,
+  "utilisation_of_wafer": 69.19,
+  "printed_and_discarded_um2": 18612045832
+ },
+ "extent_mm": 150.0,
+ "levels": [
+  {
+   "name": "die",
+   "plural": "dies",
+   "law": "explicit",
+   "view": "section",
+   "source": "wafer/dies.tsv",
+   "columns": [
+    "label",
+    "value",
+    "kind",
+    "x",
+    "y",
+    "w",
+    "h"
+   ],
+   "child": null,
+   "_": "positions are DATA, not a placement law. A stepper put them there."
+  }
+ ],
+ "leaf": {
+  "name": "square micrometre",
+  "plural": "square micrometres"
+ },
+ "laws": {
+  "explicit": "x, y, w, h come from the measurement. The engine places nothing.",
+  "areal": "r = sqrt((i+0.5)/n), theta = i * golden angle. For things with no preferred axis."
+ },
+ "views": {
+  "section": "an engineering section: outlines, a hard grid, the exclusion ring and the notch drawn, partial fields dashed. Lines, not dots.",
+  "field": "a population of points, binary, coverage as density. The sky."
+ }
+}
