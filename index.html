@@ -24,6 +24,11 @@
     border-top:1px solid var(--line);background:#000c;z-index:10;line-height:1.7}
   b{color:var(--ink);font-weight:600}
   .warn{color:var(--warn)}
+  #goto{position:fixed;left:50%;top:38%;transform:translateX(-50%);z-index:20;display:none;
+    background:#000;border:1px solid var(--dim);padding:10px 12px;min-width:min(560px,86vw)}
+  #goto input{width:100%;background:#000;color:var(--ink);border:0;outline:0;
+    font:14px/1.4 ui-monospace,Consolas,monospace}
+  #goto div{color:var(--dim);margin-top:6px}
 </style>
 </head>
 <body>
@@ -33,9 +38,15 @@
   <div id="big">loading</div>
   <div id="sub">&nbsp;</div>
 </div>
+<div id="goto">
+  <input id="gotoin" autocomplete="off" spellcheck="false"
+         placeholder="ordinal, or repository, or repository/commit">
+  <div>enter to collapse &middot; escape to cancel &middot; any point is one fetch away</div>
+</div>
 <div id="crt"></div>
 <div id="hud">starting</div>
 <div id="foot">
+  <b>r</b> collapse to a random point &middot; <b>/</b> collapse to an address &middot;
   <b>click</b> to travel in &middot; <b>backspace</b> to pull back &middot; drag to steer &middot;
   scroll to zoom &middot; <b>l</b> names &middot; positions are computed from the ordinal, never
   stored &middot; provided as is, without warranty of any kind; a chart, not a design
@@ -287,6 +298,7 @@ fetch('universe.json').then(r => r.ok ? r.json() : Promise.reject(r.status)).the
     throw new Error('mismatch');
   }
   LAWS[LEVELS[0].law](rows, 0, 0, 1);
+  cumulate(rows);
   root = { label:M.name, value:TOTAL, children:rows, x:0, y:0, rho:1, depth:-1 };
   big.textContent = words(TOTAL) + ' ' + M.unit;
   sub.textContent = fmt(TOTAL) + ' exactly · ' + fmt(rows.length) + ' '
@@ -310,26 +322,81 @@ function loadRows(url, depth) {
     }).filter(r => r.value > 0));
 }
 
-const pending = new Set();
-function requestChildren(node) {
+const pending = new Map();
+function requestChildren(node) { ensureChildren(node); }
+function ensureChildren(node) {
   const lv = LEVELS[node.depth];
-  if (node.children || node.noChildren || !lv || !lv.child) { node.noChildren = true; return; }
+  if (node.children) return Promise.resolve(node.children);
+  if (node.noChildren || !lv || !lv.child) { node.noChildren = true; return Promise.resolve(null); }
   const url = lv.child.replace('{i2}', String(node.i).padStart(2, '0'));
-  if (pending.has(url)) return;
-  pending.add(url);
-  loadRows(url, node.depth + 1).then(rows => {
-    if (!rows.length) { node.noChildren = true; return; }
+  if (pending.has(url)) return pending.get(url);
+  const pr = loadRows(url, node.depth + 1).then(rows => {
+    if (!rows.length) { node.noChildren = true; return null; }
     const sum = rows.reduce((a, r) => a + r.value, 0);
     if (sum !== node.value) {
       // a child level that does not sum to its parent would break the accounting, so it is
       // refused for this node rather than allowed to quietly bend the total
       node.badChildren = 'children sum to ' + fmt(sum) + ', parent holds ' + fmt(node.value);
-      node.noChildren = true; return;
+      node.noChildren = true; return null;
     }
     LAWS[LEVELS[node.depth + 1].law](rows, node.x, node.y, node.rho);
+    cumulate(rows);
     node.children = rows;
     restart();
-  }).catch(() => { node.noChildren = true; }).finally(() => pending.delete(url));
+    return rows;
+  }).catch(() => { node.noChildren = true; return null; }).finally(() => pending.delete(url));
+  pending.set(url, pr);
+  return pr;
+}
+
+// ------------------------------------------------------------------- COLLAPSING SPACE TIME
+// TRAVELLING IS NOT COLLAPSING. Flying in level by level is traversal, and traversal is the cost
+// this whole structure exists to remove. The placement law is INVERTIBLE: an ordinal gives a
+// position and a position gives the ordinal back, at every level. So any one of 37.93 billion
+// things can be addressed directly. Landing on it costs one fetch, of the one sector it lives in,
+// and no walking at all. That is what collapses the distance: not moving faster, but not moving.
+function cumulate(rows) {
+  let acc = 0;
+  for (const r of rows) { r.cum = acc; acc += r.value; }
+}
+function findByOrdinal(rows, k) {
+  let lo = 0, hi = rows.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (rows[mid].cum <= k) lo = mid; else hi = mid - 1; }
+  return rows[lo];
+}
+// where a leaf sits inside its object: the same arithmetic the vertex shader does, run backwards
+function leafPosition(node, m) {
+  const r = node.rho * Math.sqrt((m + 0.5) / node.value);
+  const k32 = (node.seed + m) >>> 0;
+  const a = 6.283185307179586 * ((Math.imul(k32, GOLD32) >>> 0) / 4294967296);
+  return [node.x + Math.cos(a) * r, node.y + Math.sin(a) * r];
+}
+
+let target = null;
+async function collapseTo(k) {
+  if (!root || !(k >= 0) || k >= TOTAL) return;
+  const path = [];
+  let rows = root.children, node = null, local = Math.floor(k), fetches = 0;
+  while (rows) {
+    node = findByOrdinal(rows, local);                // binary search, not a walk
+    path.push(node);
+    local -= node.cum;
+    if (!node.children && LEVELS[node.depth] && LEVELS[node.depth].child) fetches++;
+    const kids = await ensureChildren(node);          // ONE fetch, only for the sector entered
+    if (!kids) break;
+    rows = kids;
+  }
+  const [lx, ly] = leafPosition(node, local);
+  // point the instrument at the zoom where this leaf's own object can actually be resolved,
+  // so you arrive able to see the thing rather than at a boundary you must then cross
+  // a margin, because arriving at exactly the resolving limit leaves the object a hair short
+  // of resolving and the traveller staring at a boundary they just crossed
+  const needPx = Math.sqrt(node.value / (Math.PI * PER_PIXEL)) * 1.12;
+  let s = needPx / (node.rho * (cv.height / 2));
+  s = Math.max(0.5 / node.rho, Math.min(1e12, s));
+  tween = { t0:performance.now(), dur:900, s0:scale, s1:s, p0:pan.slice(), p1:[-lx*s, -ly*s] };
+  target = { k, x:lx, y:ly, m:local, node, path, fetches,
+             address: path.map(n => n.label).join(' / ') + ' # ' + fmt(local) };
 }
 
 // --------------------------------------------------------------------------------- the camera
@@ -360,11 +427,14 @@ function stepTween() {
 }
 
 // -------------------------------------------------------------- what the screen can hold
-// The criterion is physics, not taste: ONE THING PER PIXEL. Above that they overlap, coverage
-// saturates and the screen stops carrying information, which is the same surface brightness limit
-// that stops a telescope resolving a galaxy into stars. Below it, exclusion holds: every thing
-// has a pixel of its own and the count survives the drawing.
-const PER_PIXEL = 1;
+// THE CONFUSION LIMIT, WHICH IS THE REAL CRITERION. One thing per pixel is not the point at which
+// things can be told apart: at one per resolution element a random field is about 63% covered and
+// what you see is a confused mush, not a population. Radio astronomy has measured where this
+// starts and calls it source confusion; it sets in at roughly one source per twenty to fifty beam
+// areas, so surveys are cut off there rather than at one per beam. The same number is used here.
+// Thirty pixels to a thing gives about three per cent coverage: a field with black between, where
+// the count survives the drawing and exclusion actually holds.
+const PER_PIXEL = 1 / 30;
 const CHILD_PX  = 44;        // a source smaller than this keeps its children folded up
 const RING_PX   = 56;        // beyond this an unresolved source is drawn as its boundary
 let resolved = [], discs = [], rings = [], held = 0, heldN = 0, drawn = 0, outside = 0;
@@ -380,20 +450,35 @@ function walk(node, depth) {
   if (rpx < 0.4) { held += node.value; heldN++; return; }              // below the grain
 
   const capacity = Math.PI * rpx * rpx * PER_PIXEL;
+
+  // THE MEASURED HIERARCHY WINS. Checking "does it fit" before "does it have children" is how a
+  // structure gets thrown away: once a repository's disc is large enough to hold its lines, it
+  // would draw all 35.56 billion of them flat, and the 5,054 commits that were measured would
+  // stop existing at exactly the zoom where they become visible. Worse, an address would then
+  // name a commit while the picture drew that line somewhere else. Descent is tried first.
+  //
+  // A PARENT STILL ONLY DISSOLVES WHEN ITS CHILDREN CAN BE SEEN. Descending too early replaces
+  // one visible source with five thousand sub pixel ones and the sky goes empty, which is a
+  // worse lie than the disc: the things are still there, and so is the object.
+  const lv = LEVELS[node.depth];
+  const canDescend = lv && lv.child && !node.noChildren;
+  if (canDescend && rpx > CHILD_PX) {
+    if (node.children && depth < 8) { for (const c of node.children) walk(c, depth + 1); return; }
+    requestChildren(node);
+    held += node.value; heldN++;
+    node.perPixel = node.value / Math.max(1, Math.PI * rpx * rpx);
+    if (rpx > RING_PX) rings.push({ node, rpx }); else discs.push({ sx, sy, rpx });
+    return;
+  }
+  // below the size where children could be told apart, the child structure is sub pixel anyway,
+  // so drawing the leaves directly states nothing the eye could have contradicted
   if (node.value <= capacity) {
     resolved.push(node); drawn += node.value;
     node.stride = Math.max(1, Math.ceil(node.value / PER_CALL));
     maxStride = Math.max(maxStride, node.stride);
     return;
   }
-  // A PARENT ONLY DISSOLVES INTO ITS CHILDREN WHEN THE CHILDREN CAN BE SEEN. Descending too
-  // early replaces one visible source with five thousand sub pixel ones and the sky goes empty,
-  // which is a worse lie than the disc: the things are still there, and so is the object.
-  if (node.children && depth < 8 && rpx > CHILD_PX) {
-    for (const c of node.children) walk(c, depth + 1);
-    return;
-  }
-  if (rpx > CHILD_PX * 0.5) requestChildren(node);
+  if (canDescend && rpx > CHILD_PX * 0.5) requestChildren(node);
   held += node.value; heldN++;
   // surface brightness: things per pixel over the source's own disc. This is the number that
   // decides whether it can be resolved, so it is the number the instrument shows.
@@ -491,6 +576,9 @@ function frame() {
   } else {
     lines.push('every ' + u.replace(/s$/, '') + ' accounted for');
   }
+  if (target) lines.push('collapsed to ' + M.unit.replace(/s$/, '') + ' ' + fmt(target.k)
+    + ' of ' + fmt(TOTAL) + ' · ' + target.path.length + ' levels, '
+    + target.fetches + (target.fetches === 1 ? ' fetch' : ' fetches') + ', no traversal');
   lines.push('distance is time · outward is older · levels are not to scale');
   hud.textContent = lines.join('\n');
   hud.className = (accounted !== TOTAL) ? 'warn' : '';
@@ -522,6 +610,22 @@ function overlay() {
       + (r.node.badChildren ? '  ·  ' + r.node.badChildren
          : r.node.children ? '' : '  ·  keep travelling'),
       x - r.rpx + 8, y - r.rpx - 6);
+  }
+
+  if (target) {
+    const [tx, ty] = [ (target.x * scale + pan[0]) / asp * ov.width/2 + ov.width/2,
+                       ov.height/2 - (target.y * scale + pan[1]) * ov.height/2 ];
+    if (tx > -200 && tx < ov.width + 200 && ty > -200 && ty < ov.height + 200) {
+      o2.strokeStyle = 'rgba(232,179,106,0.9)'; o2.lineWidth = 1;
+      o2.beginPath();
+      o2.moveTo(tx - 14, ty); o2.lineTo(tx - 5, ty);
+      o2.moveTo(tx + 5, ty);  o2.lineTo(tx + 14, ty);
+      o2.moveTo(tx, ty - 14); o2.lineTo(tx, ty - 5);
+      o2.moveTo(tx, ty + 5);  o2.lineTo(tx, ty + 14);
+      o2.stroke();
+      o2.fillStyle = 'rgba(232,179,106,0.95)';
+      o2.fillText(target.address, tx + 18, ty - 6);
+    }
   }
 
   const show = names ? (root.children || []) : (hover ? [hover] : []);
@@ -582,8 +686,38 @@ addEventListener('wheel', e => {
   scale = Math.max(0.05, Math.min(1e12, scale));
   tween = null; restart();
 }, { passive: true });
+const gotoBox = document.getElementById('goto'), gotoIn = document.getElementById('gotoin');
+function openGoto() { gotoBox.style.display = 'block'; gotoIn.value = ''; gotoIn.focus(); }
+function closeGoto() { gotoBox.style.display = 'none'; gotoIn.blur(); }
+gotoIn.addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'Escape') { closeGoto(); return; }
+  if (e.key !== 'Enter') return;
+  const q = gotoIn.value.trim();
+  closeGoto();
+  if (!q || !root) return;
+  const digits = q.replace(/[ ,_]/g, '');
+  if (/^\d+$/.test(digits)) { collapseTo(Number(digits)); return; }
+  // an address by name: repository, or repository/commit. Resolved to its ordinal, then
+  // collapsed to exactly like any other ordinal, because there is only one way in.
+  const parts = q.split('/').map(t => t.trim()).filter(Boolean);
+  const repo = root.children.find(c => c.label.toLowerCase() === parts[0].toLowerCase())
+            || root.children.find(c => c.label.toLowerCase().includes(parts[0].toLowerCase()));
+  if (!repo) { hud.textContent = 'no such address: ' + q; return; }
+  if (parts.length === 1) { collapseTo(repo.cum); return; }
+  ensureChildren(repo).then(kids => {
+    const c = (kids || []).find(x => String(x.label).startsWith(parts[1]));
+    collapseTo(repo.cum + (c ? c.cum : 0));
+  });
+});
 addEventListener('keydown', e => {
-  if (e.key === 'l') names = !names;
+  if (gotoBox.style.display === 'block') return;
+  if (e.key === '/') { e.preventDefault(); openGoto(); }
+  // RANDOM NAVIGATION. A uniformly chosen point out of the whole, landed on directly. This is the
+  // test of the claim: if any of 37.93 billion can be reached for one fetch, the distance between
+  // you and the data is gone, and the size of the estate stops being a cost you pay to look.
+  else if (e.key === 'r') collapseTo(Math.floor(Math.random() * TOTAL));
+  else if (e.key === 'l') names = !names;
   else if (e.key === 'Backspace') {
     e.preventDefault();
     tween = { t0:performance.now(), dur:750, s0:scale, s1:0.92, p0:pan.slice(), p1:[0,0] };

@@ -32,10 +32,15 @@ an unresolved source: you know it is there, you know its brightness, you cannot 
 a body here is drawn whole, with its line count and its surface brightness stated, until you have
 travelled close enough that the screen can hold its lines. Then every one of them is drawn.
 
-The resolving criterion is physics, not taste: **one line per pixel**. Above that the lines
-overlap, coverage saturates, and the screen stops carrying information — the same surface
-brightness limit that stops a telescope resolving a distant galaxy into stars. Below it,
-exclusion holds: every line has a pixel of its own and the count survives the drawing.
+The resolving criterion is physics, not taste, and it is **not** one line per pixel. At one thing
+per resolution element a random field is about 63% covered, and what you get is a confused mush
+rather than a population — this was tried, and it looked exactly like the white flash it was
+supposed to cure. Astronomy already measured where this starts and calls it **source confusion**:
+it sets in at roughly one source per twenty to fifty beam areas, which is why surveys are cut off
+there instead of at one per beam.
+
+So the criterion here is **one line per thirty pixels**, about three per cent coverage. Black
+between, count intact, exclusion actually holding.
 
 You do not see 37.93 billion until you are inside a sector small enough to hold them. Travelling
 is the zoom, and nothing is thinned to make the trip easier.
@@ -77,6 +82,33 @@ The engine computes all three and checks the sum on every frame. If it ever fail
 prints **MISACCOUNTED** and the amount, and does not pretend otherwise. Travel into globalgrid2050
 and the readout says: resolved 0, held 35.56 billion in 5,054 sources, outside 2.37 billion — and
 those add to 37.93 billion.
+
+## Collapsing, which is not travelling
+
+Flying in level by level is traversal, and traversal is the cost the whole structure exists to
+remove. The placement law is **invertible**: an ordinal gives a position and a position gives the
+ordinal back, at every level. So any one of 37.93 billion things is directly addressable.
+
+- **`r`** collapses to a uniformly random point out of the whole
+- **`/`** collapses to an address: an ordinal, or `repository`, or `repository/commit`
+
+Either way the instrument binary-searches the cumulative counts, fetches **the one sector the
+target lives in**, computes the leaf's position from its ordinal, and arrives at the zoom where
+that object resolves. It then states what it cost:
+
+    collapsed to line 1,616,465,014 of 37,929,011,953 · 2 levels, 1 fetch, no traversal
+
+That is the claim worth testing: if any point in 37.93 billion is one fetch away, the size of the
+estate stops being a price you pay to look at it.
+
+## The measured hierarchy wins
+
+Checking "do these fit on screen?" before "does this have children?" is how a structure gets
+thrown away. Once a repository's disc is large enough to hold its lines, it would draw all 35.56
+billion of them flat and the 5,054 measured commits would stop existing at exactly the zoom where
+they become visible — and an address would then name a commit while the picture drew that line
+somewhere else. Descent is tried first. Leaves are drawn only at the last measured level, or below
+the size where the child structure would be sub-pixel anyway.
 
 ## What the positions mean
 
