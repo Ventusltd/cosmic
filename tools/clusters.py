@@ -139,6 +139,31 @@ def main():
     # the belt's own order: newest repository at the centre, oldest at the rim, because distance
     # is time. This is the same ordering the estate already uses, not a new one.
     rows.sort(key=lambda r: (-r['first'], r['repo']))
+
+    # NAMES ARE DISCLOSURE. A repository that is not public must not have its name published in a
+    # public cartridge: the counts are the point, the name is somebody else's business. Anything
+    # not confirmed public is given one of our own words and a number, and the totals are
+    # untouched, so the accounting still holds and nothing is hidden except the name.
+    public = set()
+    try:
+        import subprocess as _sp
+        for line in _sp.run(['gh', 'repo', 'list', 'Ventusltd', '--limit', '300',
+                             '--json', 'name,visibility', '--jq',
+                             '.[] | select(.visibility=="PUBLIC") | .name'],
+                            capture_output=True, text=True).stdout.split():
+            public.add(line.strip().lower())
+    except Exception:
+        public = None
+    if public:
+        k = 0
+        for r in rows:
+            if r['repo'].lower() not in public:
+                k += 1
+                r['repo'] = 'unnamed-%02d' % k
+        print('  redacted %d repositories that are not public' % k, file=sys.stderr)
+    else:
+        print('  WARNING: could not confirm which repositories are public. Names left as they are;'
+              ' do not publish this without checking.', file=sys.stderr)
     total = sum(r['lines'] for r in rows)
     tot_e = sum(r['entries'] for r in rows)
 
