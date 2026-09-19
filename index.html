@@ -20,6 +20,10 @@
   #sub{color:var(--dim);margin-top:2px}
   #hud{position:fixed;top:12px;right:14px;color:var(--dim);z-index:10;text-align:right;
     white-space:pre-line}
+  #lawnote{position:fixed;left:0;right:0;bottom:58px;padding:10px 14px;color:#d8c9a8;
+    background:#000e;border-top:1px solid var(--line);z-index:9;font-size:12px;line-height:1.65;
+    max-height:32vh;overflow:auto}
+  #lawnote a{color:#66ccff}
   #foot{position:fixed;left:0;right:0;bottom:0;padding:8px 14px;color:var(--dim);
     border-top:1px solid var(--line);background:#000c;z-index:10;line-height:1.7}
   b{color:var(--ink);font-weight:600}
@@ -333,6 +337,13 @@ fetch(CART).then(r => r.ok ? r.json() : Promise.reject(r.status)).then(m => {
   LAWS[LEVELS[0].law](rows, 0, 0, 1);
   cumulate(rows);
   root = { label:M.name, value:TOTAL, children:rows, x:0, y:0, rho:1, depth:-1 };
+  // WHERE A THING CANNOT BE DRAWN, THE LAW SAYS WHY, on the page rather than in a comment.
+  if (M.law_note) {
+    const n = document.createElement('div');
+    n.id = 'lawnote';
+    n.innerHTML = M.law_note + (M.laws ? ' · <a href="' + M.laws + '">the laws</a>' : '');
+    document.body.insertBefore(n, document.getElementById('foot'));
+  }
   big.textContent = words(TOTAL) + ' ' + M.unit;
   sub.textContent = fmt(TOTAL) + ' exactly · ' + fmt(rows.length) + ' '
     + (LEVELS[0].plural || LEVELS[0].name) + ' · ' + (M.subtitle || '');
@@ -625,13 +636,15 @@ function frame() {
     + ' · held ' + words(held) + ' in ' + fmt(heldN)
     + (heldN === 1 ? ' source' : ' sources')
     + ' · outside ' + words(outside));
+  // THE HUD CITES THE LAW THAT GOVERNS EACH STATE, so a refusal is never unexplained.
+  if (held) lines.push('L12 · what is held is past the confusion limit, not discarded');
   if (accounted !== TOTAL) {
-    lines.push('MISACCOUNTED by ' + fmt(TOTAL - accounted) + ' ' + u);
+    lines.push('L13 BROKEN · MISACCOUNTED by ' + fmt(TOTAL - accounted) + ' ' + u);
   } else if (!done) {
     lines.push('exposing ' + (retired / maxStride * 100).toFixed(0) + '% · '
       + ((performance.now() - started) / 1000).toFixed(1) + ' s');
   } else {
-    lines.push('every ' + u.replace(/s$/, '') + ' accounted for');
+    lines.push('L13 · every ' + u.replace(/s$/, '') + ' accounted for');
   }
   if (target) lines.push('collapsed to ' + M.unit.replace(/s$/, '') + ' ' + fmt(target.k)
     + ' of ' + fmt(TOTAL) + ' · ' + target.path.length + ' levels, '

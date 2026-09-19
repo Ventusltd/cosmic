@@ -1,0 +1,29 @@
+{
+  "_": "THE KUIPER BELT IS THE VIEW OF THE MESS. It is the same estate as universe.json and the same engine, with one difference: no hierarchy is loaded. Repositories only, scattered, with nothing sorted underneath them. That is what a debris field is, and tidying it would be a claim about structure that has not been measured here.",
+
+  "name": "the Kuiper belt",
+  "subtitle": "the estate as it actually lies: every repository a body, nothing sorted underneath",
+  "unit": "lines",
+  "total": 37929011953,
+
+  "asof": "2026-09-19T11:24:27+01:00",
+  "measured_by": "tools/clusters.py, walking every path in every commit's tree",
+  "cross_checked_by": "tools/belt_split.py, an independent walk with identical line and entry totals",
+
+  "law_note": "CAN EVERY LINE BE SHOWN AT ONCE? No, and the law says why. 37,929,011,953 lines over about a million pixels is roughly 38,000 to a pixel, which is 1,100 times past the confusion limit (L12). Nothing honest can be drawn at that density: a random field at even one per pixel is 63% covered and unreadable. So no line is thinned and none is dropped. Every line is drawable, but not simultaneously, and the instrument states at all times how many are resolved, how many are held unresolved, and how many are outside the field, which must sum to the whole (L13).",
+  "laws": "https://github.com/Ventusltd/law",
+
+  "levels": [
+    {
+      "name": "repository",
+      "plural": "repositories",
+      "law": "areal",
+      "source": "belt.tsv",
+      "columns": ["label", "value", "entries", "commits", "head", "first"],
+      "child": null,
+      "_": "child is null ON PURPOSE. The Kuiper belt does not descend into commits, because the mess has no order imposed on it. Travel far enough into a body and its lines resolve directly, which is the honest picture of an unsorted pile. For the clustered view, load universe.json instead."
+    }
+  ],
+
+  "leaf": { "name": "line", "plural": "lines" }
+}
