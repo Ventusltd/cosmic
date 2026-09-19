@@ -1,0 +1,14 @@
+{
+ "asof": "2026-09-19T11:24:27+01:00",
+ "command": "python tools/clusters.py --roots C:/Users/vikra/Documents/GitHub --out .",
+ "commits": 9920,
+ "delta_lines": 132966860,
+ "entries": 15065506,
+ "entry_lines": 37929011953,
+ "matches_published_entries": false,
+ "matches_published_lines": false,
+ "published_entries": 14998313,
+ "published_entry_lines": 37796045093,
+ "repositories": 67,
+ "seconds": 565.2
+}

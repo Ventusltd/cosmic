@@ -3,207 +3,550 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>202609190700-universe</title>
+<title>cosmic</title>
 <style>
   :root{--ink:#e8e6e1;--dim:#8b919c;--line:#171a20}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:#000;color:var(--ink);
     font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow:hidden}
-  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;background:#000;
-    image-rendering:pixelated}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated}
+  #c{background:#000;z-index:1}
+  #o{background:transparent;z-index:4;pointer-events:none}
   /* a 90s display: scanlines, and nothing smoothed anywhere */
   #crt{position:fixed;inset:0;pointer-events:none;z-index:5;
     background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.28) 2px 3px)}
-  #top{position:fixed;top:0;left:0;right:0;padding:8px 12px;display:flex;gap:16px;
-    align-items:baseline;flex-wrap:wrap;pointer-events:none;z-index:10}
-  #name{letter-spacing:.06em}
-  #count{color:var(--dim)}
-  #hud{position:fixed;top:8px;right:12px;color:var(--dim);z-index:10;text-align:right}
-  #foot{position:fixed;left:0;right:0;bottom:0;padding:8px 12px;color:var(--dim);
+  #top{position:fixed;top:0;left:0;right:0;padding:10px 14px;pointer-events:none;z-index:10}
+  #big{font-size:20px;letter-spacing:.02em;line-height:1.2}
+  #sub{color:var(--dim);margin-top:2px}
+  #hud{position:fixed;top:12px;right:14px;color:var(--dim);z-index:10;text-align:right;
+    white-space:pre-line}
+  #foot{position:fixed;left:0;right:0;bottom:0;padding:8px 14px;color:var(--dim);
     border-top:1px solid var(--line);background:#000c;z-index:10;line-height:1.7}
   b{color:var(--ink);font-weight:600}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="top"><span id="name">THE UNIVERSE</span><span id="count">everything git logged</span></div>
+<canvas id="o"></canvas>
+<div id="top">
+  <div id="big">loading</div>
+  <div id="sub">everything git logged</div>
+</div>
 <div id="crt"></div>
 <div id="hud">starting</div>
 <div id="foot">
-  drag to steer &middot; scroll to zoom &middot; every particle is one line git has ever recorded &middot;
-  positions are computed from the ordinal, never stored &middot; provided as is, without warranty of any
-  kind; a chart, not a design
+  <b>click</b> to travel in &middot; <b>backspace</b> to pull back &middot; drag to steer &middot;
+  scroll to zoom &middot; <b>l</b> names &middot; every particle is one line git has ever recorded
+  &middot; positions are computed from the ordinal, never stored &middot; provided as is, without
+  warranty of any kind; a chart, not a design
 </div>
 <script type="module">
-// THE UNIVERSE IS EVERYTHING GIT LOGGED.
+// COSMIC IS THE ENGINE.
 //
-// 124,905,502 lines, measured 2026-09-19 by twelve self-hosted runners over every blob in git
-// history, sharded deterministically by content SHA, all twelve shards present.
+// SEE IT AS IT IS. Nothing is coloured in. No particle is invented to fill a space, none is
+// thinned to make a picture, no number is softened. What is measured is drawn; what cannot be
+// resolved is declared unresolved and counted where it stands.
 //
-// There is NO BUFFER. A buffer of 124.9 million positions would be a gigabyte and no browser
-// would accept it. Each particle's position is computed in the vertex shader from gl_VertexID
-// by the estate's own placement law, so the whole universe is drawn from a single integer and
-// nothing is stored. This is the second law: positions are computed, never stored.
+// HOW TO COUNT INFINITY WITHOUT BEING KILLED BY IT. Drawing 37.9 billion points on a million
+// pixels gives forty thousand lines to a pixel, which is a white flash and tells you nothing. The
+// real sky has the same problem and solves it two ways, and both are copied here exactly:
 //
-// Distance is time, as in the night sky: the further out, the further into the past.
-// TWO REAL NUMBERS, NEITHER STANDING FOR THE OTHER. Both measured 2026-09-19 by twelve
-// self-hosted runners, all shards present.
-//   DISTINCT  124,905,502  distinct lines git has recorded, copies collapsed by content
-//   EVERY  37,796,045,093  every line in every file in every commit, copies counted each time
-const DISTINCT = 124905502;
-const EVERY    = 37796045093;
-let N = EVERY;               // the default is everything. Press d for distinct.
+//   CLUSTERING.  Matter is not spread evenly. Stars bind into clusters, clusters into galaxies,
+//                galaxies into superclusters, and between them are voids. The estate is already
+//                built the same way: estate -> repository -> commit -> line. Every level here is
+//                placed by the SAME law as the level above it, so the structure is self similar
+//                and the black between is structural, not decorative. The void is data.
+//
+//   RESOLUTION.  A telescope does not resolve the whole sky at once. Beyond its reach an object
+//                is an unresolved source: you know it is there, you know how bright, you cannot
+//                see inside it. So a body here is drawn whole, with its line count stated, until
+//                you have travelled close enough that the screen can hold its lines. Then, and
+//                only then, every one of them is drawn.
+//
+// Travel is the zoom. Distance is time: the centre of any level is its newest work and the rim is
+// its oldest, at every scale, so going outward is going backwards.
+//
+// THE COUNTS come from belt.tsv, one row per repository, and commits/NN.tsv, one row per commit,
+// fetched only when that sector is entered. They were measured by walking every path in every
+// commit's tree, copies counted each time they appear. The page will not draw a total it did not
+// load.
 const GOLDEN = 2.399963229728653;
+// 0.6180339887... over 2^32: the golden angle as an exact integer ratio, so the angle is computed
+// in wrapping uint arithmetic and every ordinal gets its own, past 2^32 and beyond.
+const GOLD32 = 2654435769;
 
-const cv = document.getElementById('c');
-const gl = cv.getContext('webgl2', { antialias: false, alpha: false, powerPreference: 'high-performance' });
+const cv  = document.getElementById('c');
+const ov  = document.getElementById('o');
+const o2  = ov.getContext('2d');
+const gl  = cv.getContext('webgl2', {
+  antialias:false, alpha:false, powerPreference:'high-performance',
+  // the exposure accumulates ACROSS frames. Without this the browser may discard the drawing
+  // buffer after each composite and every frame but the last is thrown away, while the
+  // instrument goes on reporting a whole exposure. Required, not an optimisation.
+  preserveDrawingBuffer:true });
 const hud = document.getElementById('hud');
+const big = document.getElementById('big');
+const sub = document.getElementById('sub');
+
 const fmt = n => n.toLocaleString('en-GB');
+// NOBODY READS 37929011953, AND POWERS OF TEN ARE WORSE. The headline is said the way a person
+// says it. The exact figure is never thrown away; it just stops being the first thing you see.
+function words(n) {
+  if (n >= 1e12) return (n / 1e12).toFixed(2) + ' trillion';
+  if (n >= 1e9)  return (n / 1e9 ).toFixed(2) + ' billion';
+  if (n >= 1e6)  return (n / 1e6 ).toFixed(2) + ' million';
+  if (n >= 1e3)  return (n / 1e3 ).toFixed(1) + ' thousand';
+  return String(n);
+}
 
 if (!gl) {
   hud.textContent = 'WebGL2 is not available here. Refusing rather than drawing a fraction.';
   throw new Error('no webgl2');
 }
 
-const VS = `#version 300 es
+// ------------------------------------------------------------------------------- the shaders
+const MAXB = 128;
+
+// bodies: one point per unresolved object. This is the sky at a distance, where a whole
+// repository is a single source because that is all the screen can hold.
+const VS_BODY = `#version 300 es
 precision highp float;
-uniform float u_n;        // the whole population
-uniform float u_scale;    // zoom
+uniform vec4 u_body[${MAXB}];   // clip x, clip y, radius in pixels, unused
+out float v_px;
+void main() {
+  vec4 b = u_body[gl_VertexID];
+  v_px = b.z;
+  gl_Position = vec4(b.xy, 0.0, 1.0);
+  gl_PointSize = max(1.0, b.z * 2.0);
+}`;
+const FS_BODY = `#version 300 es
+precision highp float;
+in float v_px;
+out vec4 o;
+void main() {
+  // BINARY. Inside the body or outside it, hard edged, the way a monochrome display drew a disc.
+  // No glow, no falloff, nothing added that was not counted.
+  if (v_px > 1.5 && length(gl_PointCoord - 0.5) > 0.5) discard;
+  o = vec4(0.87, 0.89, 0.86, 1.0);
+}`;
+
+// lines: every line of ONE object, placed inside it by the estate's own law. Drawn only when the
+// object is resolved, and then completely.
+const VS_LINE = `#version 300 es
+precision highp float;
+uniform vec2  u_c;        // the object's centre, in world units
+uniform float u_rho;      // the object's radius, in world units
+uniform float u_invn;     // 1 / its line count
+uniform uint  u_stride;
+uniform uint  u_pass;
+uniform uint  u_seed;     // the object's own phase, so two objects never share a pattern
+uniform float u_scale;
 uniform vec2  u_pan;
 uniform float u_aspect;
-uniform float u_stride;   // the interleave: pass p draws every STRIDE-th particle
-uniform float u_pass;
-out float v_r;
 void main() {
-  // INTERLEAVED, NOT CONTIGUOUS. Radius is monotonic in the ordinal, so drawing k in order
-  // fills outward from the centre and an unfinished exposure looks like a small disc rather
-  // than a faint universe. Pass p draws k = i*STRIDE + p, so every pass spreads across the
-  // whole population. After STRIDE passes every ordinal has been drawn exactly once: the
-  // exposure converges on the complete set and skips nothing.
-  float k = float(gl_VertexID) * u_stride + u_pass;
-  if (k >= u_n) { gl_Position = vec4(2.0, 2.0, 0.0, 1.0); return; }
-  // the estate's placement law, unchanged: r from the ordinal, theta by the golden angle.
-  // sqrt gives uniform areal density, so the disc fills evenly rather than crowding the centre.
-  float r = sqrt((k + 0.5) / u_n);
-  float a = k * ${GOLDEN};
-  vec2 p = vec2(cos(a), sin(a)) * r;
-  v_r = r;
+  // THE ORDINAL DOES NOT FIT IN A FLOAT. At 3.5e10 a float32 step is 4096, so building k as a
+  // float would quantise it and every pass would land on the same positions. The fraction comes
+  // from float(gl_VertexID), exact below 2^24; the angle is built in wrapping uint arithmetic,
+  // exact mod 2^32.
+  float frac = (float(gl_VertexID) * float(u_stride) + float(u_pass)) * u_invn;
+  if (frac >= 1.0) { gl_Position = vec4(2.0, 2.0, 0.0, 1.0); return; }
+  // sqrt gives uniform areal density inside the object, so its AREA is its share of the lines
+  float r = u_rho * sqrt(frac);
+  uint k32 = u_seed + uint(gl_VertexID) * u_stride + u_pass;
+  float a = 6.283185307179586 * float(k32 * ${GOLD32}u) * (1.0 / 4294967296.0);
+  vec2 p = u_c + vec2(cos(a), sin(a)) * r;
   p = p * u_scale + u_pan;
   p.x /= u_aspect;
   gl_Position = vec4(p, 0.0, 1.0);
   gl_PointSize = 1.0;
 }`;
-
-const FS = `#version 300 es
+const FS_LINE = `#version 300 es
 precision highp float;
-in float v_r;
 out vec4 o;
 void main() {
-  // BINARY. A line either exists at this position or it does not. There is no partial
-  // brightness, because there is no such thing as a partial line. One or zero.
+  // A line either exists at this position or it does not. One or zero, no partial brightness,
+  // because there is no such thing as a partial line.
   o = vec4(0.87, 0.89, 0.86, 1.0);
 }`;
 
-function sh(type, src) {
-  const s = gl.createShader(type);
-  gl.shaderSource(s, src); gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
-  return s;
+function build(vs, fs) {
+  const mk = (t, src) => {
+    const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  };
+  const p = gl.createProgram();
+  gl.attachShader(p, mk(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
 }
-const prog = gl.createProgram();
-gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
-gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
-gl.linkProgram(prog);
-if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-gl.useProgram(prog);
-gl.bindVertexArray(gl.createVertexArray());   // no attributes, no buffer, nothing uploaded
+const PB = build(VS_BODY, FS_BODY), PL = build(VS_LINE, FS_LINE);
+const uBody = gl.getUniformLocation(PB, 'u_body[0]');
+const L = n => gl.getUniformLocation(PL, n);
+const lC=L('u_c'), lRho=L('u_rho'), lInv=L('u_invn'), lStr=L('u_stride'), lPas=L('u_pass'),
+      lSeed=L('u_seed'), lSca=L('u_scale'), lPan=L('u_pan'), lAsp=L('u_aspect');
 
-const uN = gl.getUniformLocation(prog, 'u_n');
-const uS = gl.getUniformLocation(prog, 'u_scale');
-const uP = gl.getUniformLocation(prog, 'u_pan');
-const uA = gl.getUniformLocation(prog, 'u_aspect');
-const uST = gl.getUniformLocation(prog, 'u_stride');
-const uPA = gl.getUniformLocation(prog, 'u_pass');
+gl.bindVertexArray(gl.createVertexArray());   // no attributes, no buffers, nothing uploaded
+gl.disable(gl.BLEND);                         // coverage shows density, the way a CRT had to
+gl.clearColor(0, 0, 0, 1);
 
-// No blending. Alpha accumulation would manufacture brightness that no line possesses;
-// coverage alone shows density, exactly as a monochrome display had to.
-gl.disable(gl.BLEND);
+// THE INSTRUMENT REFUSES RATHER THAN APPROXIMATES, and that includes its own failure. A driver
+// reset loses the context and every draw after it silently does nothing, so an unguarded exposure
+// races to 100% and prints COMPLETE over an empty frame. That is the one lie this page must not
+// tell. Loss is caught, stated, and the exposure stops.
+let lost = false;
+cv.addEventListener('webglcontextlost', e => {
+  e.preventDefault(); lost = true;
+  hud.textContent = 'CONTEXT LOST · the GPU dropped this exposure. Nothing on screen is a '
+    + 'complete count. Reload to point the telescope again.';
+});
 
-let scale = 0.92, pan = [0, 0], drawn = 0, ms = 0;
+// ---------------------------------------------------------------------- the exposure's state
+// declared before anything can call restart()
+const PER_CALL = 600000;   // nine million points in one call trips the driver watchdog
+let pass = 0, maxStride = 1, started = 0, fence = null, fenceAt = 0, perFrame = 1, retired = 0;
+function restart() { pass = 0; retired = 0; if (fence) { gl.deleteSync(fence); fence = null; } }
 
-// A single draw call of 124.9 million is refused by some drivers, so the SAME complete
-// population is drawn in passes. Paging is honest: the set is unchanged. Sampling would not be.
-// The exposure is interleaved. STRIDE passes, each drawing every STRIDE-th particle, so the
-// first pass lands in milliseconds and already shows the whole structure; each pass after it
-// adds detail. After STRIDE passes every particle has been drawn exactly once. This is
-// progressive refinement, not sampling: it converges on the complete set and says so.
-const STRIDE = 4096;
-let pass = 0, started = 0, perFrame = 3;
+// --------------------------------------------------------------------------- the placement
+// ONE LAW, USED AT EVERY LEVEL. Children are laid inside their parent's disc: orbit by age with
+// the newest at the centre, bearing by the golden angle so no two share a direction, and radius
+// as the square root of the share of lines so that AREA is the measurement. Scaled by the
+// parent's radius, this is the same law all the way down, which is why the structure is self
+// similar and why the voids appear on their own rather than being drawn in.
+// A_MIN WAS AN INVENTED HOLE. A minimum orbit clears the centre of every level, which reads as
+// structure and is not in the data. With it at zero the law is r = sqrt((i+0.5)/n), which fills
+// the disc at uniform areal density and puts the newest child at the centre, where it belongs.
+const A_MIN = 0.0, A_MAX = 1.0, RHO_MAX = 0.085, ORBIT_FILL = 0.88;
+const GAP_SHARE = 0.32;   // a body may occupy at most this much of the gap to its neighbour
+function place(children, cx, cy, P) {
+  const n = children.length;
+  const max = Math.max(...children.map(c => c.lines)) || 1;
+  // THE VOID IS GUARANTEED, NOT HOPED FOR. Golden angle placement puts n children at a typical
+  // separation of about P/sqrt(n), so no child is ever allowed a radius larger than a third of
+  // that. Two neighbours therefore always have black between them, at every level and for any
+  // number of children, which is what makes the vastness legible.
+  const spacing = (n === 1) ? P : ORBIT_FILL * P / Math.sqrt(n);
+  const cap = Math.min(RHO_MAX * P, GAP_SHARE * spacing);
+  children.forEach((c, i) => {
+    if (n === 1) { c.x = cx; c.y = cy; }
+    else {
+      const a = P * ORBIT_FILL * (A_MIN + (A_MAX - A_MIN) * Math.sqrt((i + 0.5) / n));
+      const th = i * GOLDEN;
+      c.x = cx + a * Math.cos(th);
+      c.y = cy + a * Math.sin(th);
+    }
+    // within a level the areas are exactly proportional to the line counts, because every
+    // sibling is scaled by the same cap. ACROSS levels nothing is to scale, and it cannot be:
+    // a commit drawn to scale inside the estate would be smaller than an atom on this screen.
+    // The instrument says so rather than pretending the zoom is a ruler.
+    c.rho = cap * Math.sqrt(c.lines / max);
+    c.i = i;
+    c.seed = (c.seed === undefined) ? (i * 2654435761) >>> 0 : c.seed;
+  });
+}
 
+// -------------------------------------------------------------------------------- the estate
+let root = null, TOTAL = 0, hover = null, names = false;
+
+fetch('belt.tsv').then(r => r.ok ? r.text() : Promise.reject(r.status)).then(txt => {
+  const rows = txt.split('\n').filter(l => l && l[0] !== '#').map(l => {
+    const p = l.split('\t');
+    return { label:p[0], lines:+p[1], entries:+p[2], commits:+p[3], head:+p[4], first:+p[5],
+             kind:'repository' };
+  }).filter(r => r.lines > 0);
+  if (!rows.length) { hud.textContent = 'belt.tsv held no repositories. Refusing to draw.'; return; }
+  TOTAL = rows.reduce((a, r) => a + r.lines, 0);
+  rows.forEach((r, j) => { r.childUrl = 'commits/' + String(j).padStart(2, '0') + '.tsv'; });
+  place(rows, 0, 0, 1);
+  root = { label:'the estate', lines:TOTAL, children:rows, x:0, y:0, rho:1, kind:'estate' };
+  big.textContent = words(TOTAL) + ' lines';
+  sub.textContent = fmt(TOTAL) + ' exactly · ' + rows.length + ' repositories · '
+    + 'every line in every file in every commit, copies counted each time';
+}).catch(() => {
+  hud.textContent = 'belt.tsv did not load. The telescope will not invent a sky.';
+});
+
+// A SECTOR IS FETCHED ONLY WHEN IT IS ENTERED. Nobody looks at two sectors at once, so the whole
+// hierarchy is never downloaded. This is how GridAtlas already works, and it is the reason the
+// page opens in milliseconds however large the estate becomes.
+const pending = new Set();
+function requestChildren(node) {
+  if (node.children || node.noChildren || pending.has(node.childUrl)) return;
+  pending.add(node.childUrl);
+  fetch(node.childUrl).then(r => r.ok ? r.text() : Promise.reject(r.status)).then(txt => {
+    const rows = txt.split('\n').filter(l => l && l[0] !== '#').map(l => {
+      const p = l.split('\t');
+      return { label:p[3], unix:+p[0], lines:+p[1], entries:+p[2], kind:'commit' };
+    }).filter(r => r.lines > 0);
+    if (!rows.length) { node.noChildren = true; return; }
+    place(rows, node.x, node.y, node.rho);
+    node.children = rows;
+    restart();
+  }).catch(() => { node.noChildren = true; }).finally(() => pending.delete(node.childUrl));
+}
+
+// -------------------------------------------------------------------------------- the camera
+let scale = 0.92, pan = [0, 0], tween = null;
 function resize() {
-  const d = 1;   // one device pixel per screen pixel: hard square dots, nothing smoothed
-  cv.width = Math.floor(innerWidth * d);
-  cv.height = Math.floor(innerHeight * d);
+  cv.width = ov.width = Math.floor(innerWidth);
+  cv.height = ov.height = Math.floor(innerHeight);
   gl.viewport(0, 0, cv.width, cv.height);
+  restart();
 }
-addEventListener('resize', () => { resize(); pass = 0; }); resize();
+addEventListener('resize', resize); resize();
 
-function frame() {
-  if (pass === 0) { gl.clear(gl.COLOR_BUFFER_BIT); started = performance.now(); }
-  gl.uniform1f(uN, N);
-  gl.uniform1f(uS, scale);
-  gl.uniform2f(uP, pan[0], pan[1]);
-  gl.uniform1f(uA, cv.width / cv.height);
-  gl.uniform1f(uST, STRIDE);
-  const per = Math.ceil(N / STRIDE);
-  const t0 = performance.now();
-  let did = 0;
-  while (pass < STRIDE && did < perFrame) {
-    gl.uniform1f(uPA, pass);
-    gl.drawArrays(gl.POINTS, 0, per);
-    pass++; did++;
-    if (performance.now() - t0 > 12) break;          // keep the first frame in milliseconds
+// TRAVELLING. Clicking an object flies the camera into it. You are not filtering a list, you are
+// moving until the thing resolves, which is the only honest way to look at 37.9 billion of
+// anything.
+function travelTo(b, fill) {
+  const s = (fill || 0.78) / b.rho;
+  tween = { t0:performance.now(), dur:750, s0:scale, s1:s, p0:pan.slice(),
+            p1:[-b.x * s, -b.y * s] };
+}
+function stepTween() {
+  if (!tween) return;
+  const u = Math.min(1, (performance.now() - tween.t0) / tween.dur);
+  const e = u < 0.5 ? 2*u*u : 1 - Math.pow(-2*u + 2, 2) / 2;
+  // zoom is geometric, so it is interpolated in the log; otherwise the last stretch of a long
+  // approach arrives all at once
+  scale = Math.exp(Math.log(tween.s0) + (Math.log(tween.s1) - Math.log(tween.s0)) * e);
+  pan = [tween.p0[0] + (tween.p1[0]-tween.p0[0])*e, tween.p0[1] + (tween.p1[1]-tween.p0[1])*e];
+  restart();
+  if (u >= 1) tween = null;
+}
+
+// ------------------------------------------------------------------- what the screen can hold
+// An object is RESOLVED when its lines can be told apart on the pixels it covers. Otherwise, if
+// its children are known, the telescope looks at them instead; if they are not, they are asked
+// for; and until they arrive the object is drawn as a source with its count stated. Nothing is
+// discarded and nothing is thinned. This is the honest version of "do not show 37.9 billion until
+// you are inside a sector".
+// THE RESOLVING CRITERION IS PHYSICS, NOT TASTE. Two sources are resolved when they fall in
+// different resolution elements; here the resolution element is the pixel, so the limit is ONE
+// line per pixel. Above that the lines overlap, coverage saturates, and the screen stops carrying
+// information: that is the white flash, and it is the same surface brightness limit that stops a
+// telescope resolving a galaxy into stars. Below it, exclusion holds: every line has a pixel of
+// its own and the count survives the drawing.
+const LINES_PER_PIXEL = 1;
+const CHILD_PX = 44;         // a source smaller than this keeps its children folded up
+const RING_PX = 56;          // beyond this an unresolved source is drawn as its boundary, because
+                             // a disc that fills the screen is a white flash, not a measurement
+let resolved = [], discs = [], rings = [], held = 0, heldN = 0, drawnLines = 0;
+
+function walk(node, depth) {
+  const R = cv.height / 2 * scale, asp = cv.width / cv.height;
+  const sx = (node.x * scale + pan[0]) / asp, sy = node.y * scale + pan[1];
+  const rpx = node.rho * R;
+  const rx = rpx / (cv.width / 2), ry = rpx / (cv.height / 2);
+  if (sx + rx < -1.02 || sx - rx > 1.02 || sy + ry < -1.02 || sy - ry > 1.02) return;  // no field
+  if (rpx < 0.4) { held += node.lines; heldN++; return; }                     // below the grain
+
+  const capacity = Math.PI * rpx * rpx * LINES_PER_PIXEL;
+  if (node.lines <= capacity) {
+    resolved.push(node); drawnLines += node.lines;
+    node.stride = Math.max(1, Math.ceil(node.lines / PER_CALL));
+    maxStride = Math.max(maxStride, node.stride);
+    return;
   }
-  const drawnNow = Math.min(N, pass * per);
+  // A PARENT ONLY DISSOLVES INTO ITS CHILDREN WHEN THE CHILDREN CAN BE SEEN. Descending too
+  // early replaces one visible source with five thousand sub pixel ones and the sky goes empty,
+  // which is a worse lie than the disc: the lines are still there, and so is the object.
+  if (node.children && depth < 8 && rpx > CHILD_PX) {
+    for (const c of node.children) walk(c, depth + 1);
+    return;
+  }
+  if (node.childUrl && rpx > CHILD_PX * 0.5) requestChildren(node);
+  held += node.lines; heldN++;
+  // surface brightness: lines per pixel over the source's own disc. This is the number that
+  // decides whether it can be resolved, so it is the number the instrument shows.
+  node.perPixel = node.lines / Math.max(1, Math.PI * rpx * rpx);
+  if (rpx > RING_PX) rings.push({ node, sx, sy, rpx });
+  else discs.push({ sx, sy, rpx });
+}
+
+function classify() {
+  resolved = []; discs = []; rings = []; held = 0; heldN = 0; drawnLines = 0; maxStride = 1;
+  if (root) for (const c of root.children) walk(c, 1);
+}
+
+// ------------------------------------------------------------------------------ the exposure
+function frame() {
+  if (lost) return;
+  stepTween();
+  if (!root) { requestAnimationFrame(frame); return; }
+
+  if (fence) {
+    // A DRAW CALL IS A PROMISE, NOT A DRAWING. drawArrays returns the moment the command is
+    // queued; the GPU may be far behind. Timing the submission and calling it COMPLETE reports a
+    // picture that has not been drawn. The fence is the receipt.
+    if (gl.clientWaitSync(fence, 0, 0) === gl.TIMEOUT_EXPIRED) {
+      requestAnimationFrame(frame); return;
+    }
+    gl.deleteSync(fence); fence = null; retired = pass;
+    const took = performance.now() - fenceAt;
+    if (took < 10 && perFrame < 4096) perFrame = Math.min(4096, Math.ceil(perFrame * 1.6));
+    else if (took > 24 && perFrame > 1) perFrame = Math.max(1, Math.floor(perFrame / 1.6));
+  }
+
+  classify();
+
+  if (pass === 0) {
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    started = performance.now();
+    if (discs.length) {
+      gl.useProgram(PB);
+      const arr = new Float32Array(MAXB * 4);
+      for (let i = 0; i < discs.length; i += MAXB) {
+        const n = Math.min(MAXB, discs.length - i);
+        arr.fill(0);
+        for (let j = 0; j < n; j++) {
+          arr[j*4] = discs[i+j].sx; arr[j*4+1] = discs[i+j].sy; arr[j*4+2] = discs[i+j].rpx;
+        }
+        gl.uniform4fv(uBody, arr);
+        gl.drawArrays(gl.POINTS, 0, n);
+      }
+    }
+  }
+
+  if (resolved.length && pass < maxStride) {
+    gl.useProgram(PL);
+    gl.uniform1f(lSca, scale);
+    gl.uniform2f(lPan, pan[0], pan[1]);
+    gl.uniform1f(lAsp, cv.width / cv.height);
+    for (let i = 0; i < perFrame && pass < maxStride; i++) {
+      for (const b of resolved) {
+        if (pass >= b.stride) continue;
+        gl.uniform2f(lC, b.x, b.y);
+        gl.uniform1f(lRho, b.rho);
+        gl.uniform1f(lInv, 1 / b.lines);
+        gl.uniform1ui(lStr, b.stride);
+        gl.uniform1ui(lPas, pass);
+        gl.uniform1ui(lSeed, b.seed >>> 0);
+        gl.drawArrays(gl.POINTS, 0, Math.ceil(b.lines / b.stride));
+      }
+      pass++;
+    }
+    fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    gl.flush(); fenceAt = performance.now();
+  } else if (!resolved.length) {
+    retired = pass = maxStride;
+  }
+
   const secs = (performance.now() - started) / 1000;
-  hud.textContent = pass >= STRIDE
-    ? 'showing ' + fmt(N) + ' of ' + fmt(N) + ' lines · COMPLETE in ' + secs.toFixed(1) + ' s'
-    : 'exposure ' + (pass / STRIDE * 100).toFixed(1) + '% · ' + fmt(drawnNow) + ' of ' + fmt(N)
-      + ' lines · ' + secs.toFixed(1) + ' s';
+  const done = retired >= maxStride;
+  const shown = done ? drawnLines : Math.floor(drawnLines * (retired / maxStride));
+  const lines = [];
+  if (drawnLines) lines.push(done
+    ? 'resolved ' + words(drawnLines) + ' lines · ' + fmt(drawnLines) + ' exactly · '
+      + resolved.length + (resolved.length === 1 ? ' object' : ' objects')
+    : 'resolving ' + words(shown) + ' of ' + words(drawnLines) + ' lines · '
+      + (retired / maxStride * 100).toFixed(0) + '% · ' + secs.toFixed(1) + ' s');
+  if (held) lines.push(words(held) + ' lines held in ' + fmt(heldN)
+    + (heldN === 1 ? ' unresolved source' : ' unresolved sources'));
+  if (!drawnLines && !held) lines.push('nothing in the field');
+  lines.push((TOTAL ? (((drawnLines + held) / TOTAL) * 100).toFixed(1) : '0')
+    + '% of the estate is in this field');
+  // Olbers asked why the night sky is dark if the universe is full of stars. The answer is that
+  // it is finite in age and the light has not all arrived. This sky is dark for the same reason:
+  // it is finite, and what has not been resolved has not arrived.
+  lines.push('distance is time · outward is older · levels are not to scale');
+  hud.textContent = lines.join('\n');
+  overlay();
   requestAnimationFrame(frame);
 }
 
-// changing the view restarts the render, because a half drawn universe over a new camera
-// would be a picture of two different things at once.
-function restart() { pass = 0; }
-addEventListener('keydown', e => {
-  if (e.key === 'd') { N = (N === EVERY) ? DISTINCT : EVERY; restart(); label(); }
-});
+// ------------------------------------------------------- boundaries and names, without clutter
+// An unresolved source larger than the screen is drawn as its BOUNDARY with its count beside it.
+// Filling it white would say "here are the lines" when the lines are precisely what has not been
+// drawn. The telescope cannot look every direction at once, but it can say where the directions
+// are, so only the object under the pointer is named unless names are asked for.
+function overlay() {
+  o2.clearRect(0, 0, ov.width, ov.height);
+  if (!root) return;
+  const toPx = n => [ (n.x * scale + pan[0]) / (ov.width/ov.height) * ov.width/2 + ov.width/2,
+                      ov.height/2 - (n.y * scale + pan[1]) * ov.height/2 ];
+  const R = ov.height / 2 * scale;
+  o2.font = '11px ui-monospace,Consolas,monospace';
 
-function label() {
-  document.getElementById('count').textContent = (N === EVERY)
-    ? fmt(EVERY) + ' lines — every line in every file in every commit, copies counted each time'
-      + ' · press d for ' + fmt(DISTINCT) + ' distinct'
-    : fmt(DISTINCT) + ' lines — distinct content, copies collapsed'
-      + ' · press d for ' + fmt(EVERY) + ' with copies';
+  for (const r of rings) {
+    const [x, y] = toPx(r.node);
+    o2.strokeStyle = 'rgba(232,230,225,0.55)';
+    o2.setLineDash([2, 4]); o2.lineWidth = 1;
+    o2.beginPath(); o2.arc(x, y, r.rpx, 0, 6.2832); o2.stroke();
+    o2.setLineDash([]);
+    o2.fillStyle = 'rgba(232,230,225,0.8)';
+    o2.fillText(r.node.label + '  ·  ' + words(r.node.lines) + ' lines  ·  '
+      + words(Math.round(r.node.perPixel)) + ' lines per pixel, beyond resolving'
+      + (r.node.children ? '' : '  ·  keep travelling'), x - r.rpx + 8, y - r.rpx - 6);
+  }
+
+  const show = names ? (root.children || []) : (hover ? [hover] : []);
+  for (const b of show) {
+    const [x, y] = toPx(b); const rpx = b.rho * R;
+    if (x < -300 || x > ov.width + 300 || y < -300 || y > ov.height + 300) continue;
+    const hot = b === hover;
+    o2.strokeStyle = hot ? 'rgba(232,230,225,0.85)' : 'rgba(139,145,156,0.30)';
+    o2.lineWidth = 1;
+    o2.beginPath(); o2.arc(x, y, Math.max(3, rpx) + 4, 0, 6.2832); o2.stroke();
+    o2.fillStyle = hot ? '#e8e6e1' : 'rgba(139,145,156,0.75)';
+    o2.fillText(hot
+      ? b.label + '   ' + words(b.lines) + ' lines   ' + fmt(b.lines) + ' exactly   '
+        + (b.commits !== undefined ? fmt(b.commits) + ' commits   ' : '')
+        + (b.lines / TOTAL * 100).toFixed(2) + '% of the estate'
+      : b.label, x + Math.max(3, rpx) + 8, y - 4);
+  }
 }
-label();
 
-let drag = null;
-cv.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; });
-addEventListener('pointerup', () => { drag = null; });
+// the object under the pointer, read back through the placement law: screen gives world, world
+// gives the object. The law is invertible, which is why nothing has to be stored to answer
+// "what am I looking at".
+function pick(px, py) {
+  if (!root) { hover = null; return; }
+  const asp = cv.width / cv.height;
+  const ndx = (px / innerWidth) * 2 - 1, ndy = 1 - (py / innerHeight) * 2;
+  const wx = (ndx * asp - pan[0]) / scale, wy = (ndy - pan[1]) / scale;
+  const grain = 7 / (cv.height / 2 * scale);
+  hover = null; let best = Infinity;
+  (function scan(node, depth) {
+    for (const c of (node.children || [])) {
+      const d = Math.hypot(wx - c.x, wy - c.y);
+      if (d < Math.max(c.rho, grain) && d < best) { best = d; hover = c; }
+      if (c.children && depth < 8) scan(c, depth + 1);
+    }
+  })(root, 0);
+}
+
+// ------------------------------------------------------------------------------- the controls
+let drag = null, moved = 0;
+cv.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; moved = 0; });
+addEventListener('pointerup', e => {
+  if (drag && moved < 4) { pick(e.clientX, e.clientY); if (hover) travelTo(hover); }
+  drag = null;
+});
 addEventListener('pointermove', e => {
-  if (!drag) return;
-  pan[0] += (e.clientX - drag[0]) / innerWidth * 2;
-  pan[1] -= (e.clientY - drag[1]) / innerHeight * 2;
-  drag = [e.clientX, e.clientY];
-  restart();
+  if (drag) {
+    moved += Math.abs(e.clientX - drag[0]) + Math.abs(e.clientY - drag[1]);
+    pan[0] += (e.clientX - drag[0]) / innerWidth * 2;
+    pan[1] -= (e.clientY - drag[1]) / innerHeight * 2;
+    drag = [e.clientX, e.clientY];
+    tween = null; restart();
+  }
+  pick(e.clientX, e.clientY);
 });
 addEventListener('wheel', e => {
-  scale *= e.deltaY < 0 ? 1.12 : 1 / 1.12;
-  scale = Math.max(0.05, Math.min(4000, scale));
-  restart();
+  scale *= e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  scale = Math.max(0.05, Math.min(1e12, scale));
+  tween = null; restart();
 }, { passive: true });
+addEventListener('keydown', e => {
+  if (e.key === 'l') names = !names;
+  else if (e.key === 'Backspace') {
+    e.preventDefault();
+    tween = { t0:performance.now(), dur:750, s0:scale, s1:0.92, p0:pan.slice(), p1:[0,0] };
+  }
+});
 
 requestAnimationFrame(frame);
 </script>
