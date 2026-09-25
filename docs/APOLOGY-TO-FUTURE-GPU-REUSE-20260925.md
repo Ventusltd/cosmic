@@ -43,3 +43,5 @@ precisely, then complete it without building a parallel platform by default.
 
 This is a correction of my working method. No benchmark or physical-model
 validation was rerun to write it.
+
+Measured follow-through: [CUDA furnace progress and evidence correction](CUDA-FURNACE-PROGRESS-20260925.md).
