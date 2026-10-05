@@ -226,3 +226,9 @@ No warranty is given. A chart, not a design.
 ## Licence
 
 Open to all. The code is under the Apache License 2.0 (see LICENSE). Original text, tables and ledgers produced by this repository are under CC BY 4.0: use them, and say where they came from. Material belonging to others keeps its own licence, named beside it; standards are cited by clause and value and never reproduced.
+
+## Public diary
+
+- [3 October 2026: Celestial abilities](docs/DIARY-CELESTIAL-ABILITIES-20261003.md)
+- [5 October 2026: Learn the Kuiper and connected projects](docs/DIARY-LEARN-THE-KUIPER-20261005.md)
+- [Public project links and source revisions](https://github.com/Ventusltd/kuiper-belt/blob/main/diary/2026-10-05-public-links.json)
